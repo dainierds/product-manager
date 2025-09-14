@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, Sync, LogOut, Search, X } from 'lucide-react';
+import { db } from './firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 const App = () => {
   const [currentView, setCurrentView] = useState('projects');
@@ -60,53 +62,261 @@ const App = () => {
     phone: ''
   });
 
-  // Sample data initialization
+  // Initialize and load data
   useEffect(() => {
-    setTimeout(() => {
-      setConnected(true);
-      loadSampleData();
-    }, 1000);
+    setConnected(true);
+    loadData();
   }, []);
 
-  const loadSampleData = () => {
-    // Sample categories
-    setCategories([
-      { id: 1, name: 'Electrical', description: 'Electrical components and tools' },
-      { id: 2, name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
-      { id: 3, name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
-      { id: 4, name: 'General', description: 'General construction materials' }
-    ]);
+  // Load all data from Firestore
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // Load projects
+      const projectsSnapshot = await getDocs(collection(db, 'projects'));
+      const projectsData = projectsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProjects(projectsData);
 
-    // Sample suppliers
-    setSuppliers([
-      { id: 1, name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
-      { id: 2, name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
-      { id: 3, name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
-      { id: 4, name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
-    ]);
+      // Load products
+      const productsSnapshot = await getDocs(collection(db, 'products'));
+      const productsData = productsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(productsData);
 
-    // Sample projects
-    setProjects([
-      { id: 1, name: 'Coastal Clinic', description: '4545 Normandy Blvd', items: 0, total: 0, createdAt: '2025-09-13' },
-      { id: 2, name: 'Office Renovation', description: 'Downtown building renovation', items: 0, total: 0, createdAt: '2025-09-14' }
-    ]);
-
-    // Sample products
-    setProducts([
-      { 
-        id: 1, 
-        name: 'Ryobi One Hp 1...', 
-        description: 'Producto de Home Depot. Precio estimado basado en categoría.',
-        price: 155.00, 
-        category: 'Plumbing', 
-        supplier: "Lowe's",
-        auto: true,
-        createdAt: '2025-09-14'
+      // Load categories
+      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
+      const categoriesData = categoriesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (categoriesData.length === 0) {
+        // Add default categories
+        const defaultCategories = [
+          { name: 'Electrical', description: 'Electrical components and tools' },
+          { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
+          { name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
+          { name: 'General', description: 'General construction materials' }
+        ];
+        for (const category of defaultCategories) {
+          await addDoc(collection(db, 'categories'), {
+            ...category,
+            createdAt: new Date().toISOString()
+          });
+        }
+        // Reload categories
+        const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
+        const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setCategories(newCategoriesData);
+      } else {
+        setCategories(categoriesData);
       }
-    ]);
 
-    // Sample packs
-    setPacks([]);
+      // Load suppliers
+      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+      const suppliersData = suppliersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (suppliersData.length === 0) {
+        // Add default suppliers
+        const defaultSuppliers = [
+          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
+          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
+          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
+          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
+        ];
+        for (const supplier of defaultSuppliers) {
+          await addDoc(collection(db, 'suppliers'), {
+            ...supplier,
+            createdAt: new Date().toISOString()
+          });
+        }
+        // Reload suppliers
+        const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+        const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setSuppliers(newSuppliersData);
+      } else {
+        setSuppliers(suppliersData);
+      }
+
+      // Load packs
+      const packsSnapshot = await getDocs(collection(db, 'packs'));
+      const packsData = packsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPacks(packsData);
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setConnected(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Project functions
+  const handleProjectSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!projectFormData.name) {
+      alert('Please enter project name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const projectData = {
+        ...projectFormData,
+        items: 0,
+        total: 0,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'projects'), projectData);
+      await loadData();
+      setProjectFormData({ name: '', description: '', address: '' });
+      setShowProjectForm(false);
+    } catch (error) {
+      console.error('Error saving project:', error);
+      alert('Error saving project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Product functions
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!productFormData.name || !productFormData.price) {
+      alert('Please fill in at least the name and price');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const productData = {
+        ...productFormData,
+        price: parseFloat(productFormData.price),
+        auto: false,
+        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingProduct) {
+        await updateDoc(doc(db, 'products', editingProduct.id), productData);
+      } else {
+        await addDoc(collection(db, 'products'), productData);
+      }
+
+      await loadData();
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
+      setShowProductForm(false);
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error saving product:', error);
+      alert('Error saving product to database');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Category functions
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!categoryFormData.name) {
+      alert('Please enter category name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const categoryData = {
+        ...categoryFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'categories'), categoryData);
+      await loadData();
+      setCategoryFormData({ name: '', description: '' });
+      setShowCategoryForm(false);
+    } catch (error) {
+      console.error('Error saving category:', error);
+      alert('Error saving category');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    if (window.confirm('Are you sure you want to delete this category?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'categories', id));
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting category:', error);
+        alert('Error deleting category');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Supplier functions
+  const handleSupplierSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!supplierFormData.name) {
+      alert('Please enter supplier name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const supplierData = {
+        ...supplierFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'suppliers'), supplierData);
+      await loadData();
+      setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+      setShowSupplierForm(false);
+    } catch (error) {
+      console.error('Error saving supplier:', error);
+      alert('Error saving supplier');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSupplier = async (id) => {
+    if (window.confirm('Are you sure you want to delete this supplier?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'suppliers', id));
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting supplier:', error);
+        alert('Error deleting supplier');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   // Header component
@@ -197,6 +407,59 @@ const App = () => {
         </button>
       </div>
 
+      {/* Project Form */}
+      {showProjectForm && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {editingProject ? 'Edit Project' : 'New Project'}
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Project Name *
+              </label>
+              <input
+                type="text"
+                value={projectFormData.name}
+                onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter project name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <input
+                type="text"
+                value={projectFormData.description}
+                onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Project description or address"
+              />
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleProjectSubmit}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                {loading ? 'Saving...' : 'Save Project'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowProjectForm(false);
+                  setProjectFormData({ name: '', description: '', address: '' });
+                }}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         {projects.map(project => (
           <div key={project.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -215,11 +478,11 @@ const App = () => {
               </div>
             </div>
             <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
-              <span>{project.items} items</span>
+              <span>{project.items || 0} items</span>
               <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
             </div>
             <div className="text-right">
-              <span className="text-2xl font-bold text-green-600">${project.total.toFixed(2)}</span>
+              <span className="text-2xl font-bold text-green-600">${(project.total || 0).toFixed(2)}</span>
             </div>
           </div>
         ))}
@@ -282,6 +545,112 @@ const App = () => {
           <p>You have {products.length} products and {packs.length} packs loaded.</p>
         </div>
       </div>
+
+      {/* Product Form */}
+      {showProductForm && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {editingProduct ? 'Edit Product' : 'Add New Product'}
+          </h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  value={productFormData.name}
+                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter product name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Price *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={productFormData.price}
+                  onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <select
+                  value={productFormData.category}
+                  onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select category</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Supplier
+                </label>
+                <select
+                  value={productFormData.supplier}
+                  onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select supplier</option>
+                  {suppliers.map(supplier => (
+                    <option key={supplier.id} value={supplier.name}>
+                      {supplier.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                rows="3"
+                value={productFormData.description}
+                onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter product description"
+              />
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleProductSubmit}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
+              </button>
+              <button
+                onClick={() => {
+                  setShowProductForm(false);
+                  setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
+                  setEditingProduct(null);
+                }}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -371,14 +740,45 @@ const App = () => {
                 <div className="flex items-center space-x-4 text-sm text-gray-500">
                   <span className="font-bold text-blue-600">${product.price.toFixed(2)} each</span>
                   <span>{product.supplier}</span>
-                  <span className="bg-gray-100 px-2 py-1 rounded">{product.category}</span>
+                  {product.category && (
+                    <span className="bg-gray-100 px-2 py-1 rounded">{product.category}</span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                <button 
+                  onClick={() => {
+                    setEditingProduct(product);
+                    setProductFormData({
+                      name: product.name,
+                      price: product.price.toString(),
+                      description: product.description || '',
+                      category: product.category || '',
+                      supplier: product.supplier || ''
+                    });
+                    setShowProductForm(true);
+                  }}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                >
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button className="p-2 text-red-600 hover:bg-red-50 rounded">
+                <button 
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to delete this product?')) {
+                      setLoading(true);
+                      try {
+                        await deleteDoc(doc(db, 'products', product.id));
+                        await loadData();
+                      } catch (error) {
+                        console.error('Error deleting product:', error);
+                        alert('Error deleting product');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }
+                  }}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -426,11 +826,55 @@ const App = () => {
               + Add Category
             </button>
           </div>
+
+          {/* Category Form */}
+          {showCategoryForm && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={categoryFormData.name}
+                  onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                  placeholder="Category name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  value={categoryFormData.description}
+                  onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                  placeholder="Description (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleCategorySubmit}
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    Add Category
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCategoryForm(false);
+                      setCategoryFormData({ name: '', description: '' });
+                    }}
+                    className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {categories.map(category => (
               <div key={category.id} className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
                 <span className="text-sm">{category.name}</span>
-                <button className="text-blue-600 hover:text-blue-800">
+                <button 
+                  onClick={() => handleDeleteCategory(category.id)}
+                  className="text-blue-600 hover:text-blue-800"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -449,11 +893,69 @@ const App = () => {
               + Add Supplier
             </button>
           </div>
+          
+          {/* Supplier Form */}
+          {showSupplierForm && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={supplierFormData.name}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
+                  placeholder="Supplier name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  value={supplierFormData.contact}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
+                  placeholder="Contact person"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <input
+                  type="email"
+                  value={supplierFormData.email}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
+                  placeholder="Email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <input
+                  type="tel"
+                  value={supplierFormData.phone}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
+                  placeholder="Phone"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleSupplierSubmit}
+                    disabled={loading}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    Add Supplier
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSupplierForm(false);
+                      setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+                    }}
+                    className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {suppliers.map(supplier => (
               <div key={supplier.id} className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full">
                 <span className="text-sm">{supplier.name}</span>
-                <button className="text-green-600 hover:text-green-800">
+                <button 
+                  onClick={() => handleDeleteSupplier(supplier.id)}
+                  className="text-green-600 hover:text-green-800"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </div>
