@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, Sync, LogOut, Search, X } from 'lucide-react';
+import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, RefreshCw, LogOut, Search, X } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -329,7 +329,7 @@ const App = () => {
         </div>
         <div className="flex items-center space-x-3">
           <button className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-            <Sync className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4" />
             <span>Sync</span>
           </button>
           {currentView === 'projects' && (
