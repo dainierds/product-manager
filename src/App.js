@@ -232,6 +232,48 @@ const App = () => {
       setLoading(false);
     }
   };
+// Pack functions
+  const handlePackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!packFormData.name) {
+      alert('Please enter pack name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const packData = {
+        ...packFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'packs'), packData);
+      await loadData();
+      setPackFormData({ name: '', description: '', category: '', products: [] });
+      setShowPackForm(false);
+    } catch (error) {
+      console.error('Error saving pack:', error);
+      alert('Error saving pack');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePack = async (id) => {
+    if (window.confirm('Are you sure you want to delete this pack?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'packs', id));
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting pack:', error);
+        alert('Error deleting pack');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   // Category functions
   const handleCategorySubmit = async (e) => {
@@ -305,6 +347,49 @@ const App = () => {
   };
 
   const handleDeleteSupplier = async (id) => {
+
+    // Pack functions
+  const handlePackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!packFormData.name) {
+      alert('Please enter pack name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const packData = {
+        ...packFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'packs'), packData);
+      await loadData();
+      setPackFormData({ name: '', description: '', category: '', products: [] });
+      setShowPackForm(false);
+    } catch (error) {
+      console.error('Error saving pack:', error);
+      alert('Error saving pack');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePack = async (id) => {
+    if (window.confirm('Are you sure you want to delete this pack?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'packs', id));
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting pack:', error);
+        alert('Error deleting pack');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
     if (window.confirm('Are you sure you want to delete this supplier?')) {
       setLoading(true);
       try {
@@ -642,6 +727,78 @@ const App = () => {
                   setShowProductForm(false);
                   setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
                   setEditingProduct(null);
+                }}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Pack Form */}
+      {showPackForm && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Create New Pack
+          </h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Pack Name *
+                </label>
+                <input
+                  type="text"
+                  value={packFormData.name}
+                  onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter pack name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <select
+                  value={packFormData.category}
+                  onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select category</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                rows="3"
+                value={packFormData.description}
+                onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter pack description"
+              />
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handlePackSubmit}
+                disabled={loading}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                {loading ? 'Saving...' : 'Create Pack'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowPackForm(false);
+                  setPackFormData({ name: '', description: '', category: '', products: [] });
                 }}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
               >
