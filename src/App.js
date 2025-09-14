@@ -736,7 +736,7 @@ const App = () => {
           </div>
         </div>
       )}
-      
+
       {/* Pack Form */}
       {showPackForm && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
@@ -952,19 +952,72 @@ const App = () => {
   };
 
   // Packs List
-  const renderPacksList = () => (
-    <div className="text-center py-12">
-      <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-      <p className="text-gray-500 text-lg">No packs found</p>
-      <p className="text-gray-400 mb-6">Start by creating your first pack</p>
-      <button 
-        onClick={() => setShowPackForm(true)}
-        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
-      >
-        Create Pack
-      </button>
-    </div>
-  );
+  const renderPacksList = () => {
+    const filteredPacks = packs.filter(pack => {
+      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
+      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    if (filteredPacks.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 text-lg">No packs found</p>
+          <p className="text-gray-400 mb-6">Start by creating your first pack</p>
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Create Pack
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {filteredPacks.map(pack => (
+          <div key={pack.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <Package className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center space-x-2 mb-1">
+                  <h3 className="font-semibold text-gray-900">{pack.name}</h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Pack</span>
+                </div>
+                <p className="text-gray-600 text-sm mb-2">{pack.description}</p>
+                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                  <span className="font-bold text-green-600">{pack.products?.length || 0} products</span>
+                  {pack.category && (
+                    <span className="bg-gray-100 px-2 py-1 rounded">{pack.category}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDeletePack(pack.id)}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <button className="text-green-600 text-sm hover:underline">
+                View Pack Details
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // Settings View
   const renderSettingsView = () => (
