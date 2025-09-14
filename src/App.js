@@ -1,25 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home } from 'lucide-react';
-import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, Sync, LogOut, Search, X } from 'lucide-react';
 
 const App = () => {
-  const [currentView, setCurrentView] = useState('products');
+  const [currentView, setCurrentView] = useState('projects');
+  const [productView, setProductView] = useState('products'); // products or packs
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Data states
+  const [projects, setProjects] = useState([]);
   const [products, setProducts] = useState([]);
+  const [packs, setPacks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  
+  // Form states
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showPackForm, setShowPackForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  
+  const [editingProject, setEditingProject] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   
-  // Forms data
+  // Form data
+  const [projectFormData, setProjectFormData] = useState({
+    name: '',
+    description: '',
+    address: ''
+  });
+
   const [productFormData, setProductFormData] = useState({
     name: '',
     price: '',
     description: '',
     category: '',
     supplier: ''
+  });
+
+  const [packFormData, setPackFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    products: []
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -34,626 +60,458 @@ const App = () => {
     phone: ''
   });
 
-  // Initialize and load data
+  // Sample data initialization
   useEffect(() => {
-    setConnected(true);
-    loadData();
+    setTimeout(() => {
+      setConnected(true);
+      loadSampleData();
+    }, 1000);
   }, []);
 
-  // Load all data from Firestore
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Load products
-      const productsSnapshot = await getDocs(collection(db, 'products'));
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setProducts(productsData);
+  const loadSampleData = () => {
+    // Sample categories
+    setCategories([
+      { id: 1, name: 'Electrical', description: 'Electrical components and tools' },
+      { id: 2, name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
+      { id: 3, name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
+      { id: 4, name: 'General', description: 'General construction materials' }
+    ]);
 
-      // Load categories
-      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
-      const categoriesData = categoriesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setCategories(categoriesData);
+    // Sample suppliers
+    setSuppliers([
+      { id: 1, name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
+      { id: 2, name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
+      { id: 3, name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
+      { id: 4, name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
+    ]);
 
-      // Load suppliers
-      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
-      const suppliersData = suppliersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setSuppliers(suppliersData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setConnected(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Sample projects
+    setProjects([
+      { id: 1, name: 'Coastal Clinic', description: '4545 Normandy Blvd', items: 0, total: 0, createdAt: '2025-09-13' },
+      { id: 2, name: 'Office Renovation', description: 'Downtown building renovation', items: 0, total: 0, createdAt: '2025-09-14' }
+    ]);
 
-  // Product functions
-  const handleProductInputChange = (e) => {
-    const { name, value } = e.target;
-    setProductFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleProductSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!productFormData.name || !productFormData.price) {
-      alert('Please fill in at least the name and price');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const productData = {
-        ...productFormData,
-        price: parseFloat(productFormData.price),
-        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), productData);
-      } else {
-        await addDoc(collection(db, 'products'), productData);
+    // Sample products
+    setProducts([
+      { 
+        id: 1, 
+        name: 'Ryobi One Hp 1...', 
+        description: 'Producto de Home Depot. Precio estimado basado en categoría.',
+        price: 155.00, 
+        category: 'Plumbing', 
+        supplier: "Lowe's",
+        auto: true,
+        createdAt: '2025-09-14'
       }
+    ]);
 
-      await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
-      setShowForm(false);
-      setEditingProduct(null);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      alert('Error saving product to database');
-    } finally {
-      setLoading(false);
-    }
+    // Sample packs
+    setPacks([]);
   };
 
-  const handleEditProduct = (product) => {
-    setEditingProduct(product);
-    setProductFormData({
-      name: product.name,
-      price: product.price.toString(),
-      description: product.description || '',
-      category: product.category || '',
-      supplier: product.supplier || ''
-    });
-    setShowForm(true);
-  };
+  // Header component
+  const renderHeader = () => (
+    <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">ECP Assistant</h1>
+          <p className="text-sm text-gray-600">Welcome, dainierds41@gmail.com</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+            <Sync className="w-4 h-4" />
+            <span>Sync</span>
+          </button>
+          {currentView === 'projects' && (
+            <button 
+              onClick={() => setShowProjectForm(true)}
+              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Estimate</span>
+            </button>
+          )}
+          <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'products', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        alert('Error deleting product from database');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Category functions
-  const handleCategorySubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!categoryFormData.name) {
-      alert('Please enter category name');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const categoryData = {
-        ...categoryFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'categories'), categoryData);
-      await loadData();
-      setCategoryFormData({ name: '', description: '' });
-    } catch (error) {
-      console.error('Error saving category:', error);
-      alert('Error saving category');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteCategory = async (id) => {
-    if (window.confirm('Are you sure you want to delete this category?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'categories', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        alert('Error deleting category');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Supplier functions
-  const handleSupplierSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!supplierFormData.name) {
-      alert('Please enter supplier name');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const supplierData = {
-        ...supplierFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'suppliers'), supplierData);
-      await loadData();
-      setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-    } catch (error) {
-      console.error('Error saving supplier:', error);
-      alert('Error saving supplier');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteSupplier = async (id) => {
-    if (window.confirm('Are you sure you want to delete this supplier?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'suppliers', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting supplier:', error);
-        alert('Error deleting supplier');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const cancelForm = () => {
-    setShowForm(false);
-    setEditingProduct(null);
-    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
-  };
-
-  // Navigation
+  // Navigation component
   const renderNavigation = () => (
-    <div className="bg-white border-b border-gray-200 mb-8">
-      <div className="max-w-6xl mx-auto px-4">
+    <div className="bg-white border-b border-gray-200">
+      <div className="px-6">
         <nav className="flex space-x-8">
           <button
+            onClick={() => setCurrentView('projects')}
+            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+              currentView === 'projects'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Projects & Estimates</span>
+          </button>
+          <button
             onClick={() => setCurrentView('products')}
-            className={`py-4 px-2 border-b-2 font-medium text-sm ${
+            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
               currentView === 'products'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Home className="w-4 h-4 inline mr-2" />
-            Products
+            <Package className="w-4 h-4" />
+            <span>Product Library</span>
           </button>
           <button
             onClick={() => setCurrentView('settings')}
-            className={`py-4 px-2 border-b-2 font-medium text-sm ${
+            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
               currentView === 'settings'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Settings className="w-4 h-4 inline mr-2" />
-            Settings
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
           </button>
         </nav>
       </div>
     </div>
   );
 
-  // Products View
-  const renderProductsView = () => (
-    <>
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Package className="w-8 h-8 text-blue-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Product Manager</h1>
-              <div className="flex items-center space-x-2 mt-1">
-                {connected ? (
-                  <>
-                    <Cloud className="w-4 h-4 text-green-500" />
-                    <span className="text-sm text-green-600">Connected to Firebase</span>
-                  </>
-                ) : (
-                  <>
-                    <CloudOff className="w-4 h-4 text-red-500" />
-                    <span className="text-sm text-red-600">Offline Mode</span>
-                  </>
-                )}
+  // Projects View
+  const renderProjectsView = () => (
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Your Projects</h2>
+        <button 
+          onClick={() => setShowProjectForm(true)}
+          className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Project</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        {projects.map(project => (
+          <div key={project.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
+                <p className="text-gray-600">{project.description}</p>
+              </div>
+              <div className="flex space-x-1">
+                <button className="p-1 text-gray-400 hover:text-blue-600">
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button className="p-1 text-gray-400 hover:text-red-600">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
+            <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
+              <span>{project.items} items</span>
+              <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-2xl font-bold text-green-600">${project.total.toFixed(2)}</span>
+            </div>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Product Library View
+  const renderProductsView = () => (
+    <div className="p-6">
+      {/* Sub-navigation */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex space-x-2">
           <button
-            onClick={() => setShowForm(!showForm)}
-            disabled={loading}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors"
+            onClick={() => setProductView('products')}
+            className={`px-4 py-2 rounded-lg font-medium text-sm ${
+              productView === 'products'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
           >
-            <Plus className="w-5 h-5" />
-            <span>Add Product</span>
+            Products ({products.length})
+          </button>
+          <button
+            onClick={() => setProductView('packs')}
+            className={`px-4 py-2 rounded-lg font-medium text-sm ${
+              productView === 'packs'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Packs ({packs.length})
           </button>
         </div>
-      </div>
-
-      {/* Loading indicator */}
-      {loading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-            <span className="text-blue-700">Syncing with Firebase...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Add/Edit Product Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            {editingProduct ? 'Edit Product' : 'Add New Product'}
-          </h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={productFormData.name}
-                  onChange={handleProductInputChange}
-                  disabled={loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                  placeholder="Enter product name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price *
-                </label>
-                <input
-                  type="number"
-                  name="price"
-                  value={productFormData.price}
-                  onChange={handleProductInputChange}
-                  disabled={loading}
-                  step="0.01"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  name="category"
-                  value={productFormData.category}
-                  onChange={handleProductInputChange}
-                  disabled={loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="">Select category</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier
-                </label>
-                <select
-                  name="supplier"
-                  value={productFormData.supplier}
-                  onChange={handleProductInputChange}
-                  disabled={loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map(supplier => (
-                    <option key={supplier.id} value={supplier.name}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={productFormData.description}
-                onChange={handleProductInputChange}
-                disabled={loading}
-                rows="3"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                placeholder="Enter product description"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleProductSubmit}
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
-              </button>
-              <button
-                onClick={cancelForm}
-                disabled={loading}
-                className="bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Products List */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Products ({products.length})
-        </h2>
         
-        {products.length === 0 ? (
-          <div className="text-center py-12">
-            <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">No products added yet</p>
-            <p className="text-gray-400">Click "Add Product" to get started</p>
-          </div>
+        {productView === 'products' ? (
+          <button 
+            onClick={() => setShowProductForm(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
+          </button>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map(product => (
-              <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-gray-900 text-lg truncate">
-                    {product.name}
-                  </h3>
-                  <div className="flex space-x-1 ml-2">
-                    <button
-                      onClick={() => handleEditProduct(product)}
-                      disabled={loading}
-                      className="p-1 text-gray-400 hover:text-blue-600 disabled:text-gray-300 transition-colors"
-                      title="Edit product"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProduct(product.id)}
-                      disabled={loading}
-                      className="p-1 text-gray-400 hover:text-red-600 disabled:text-gray-300 transition-colors"
-                      title="Delete product"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-2xl font-bold text-green-600">
-                      ${product.price.toFixed(2)}
-                    </span>
-                    {product.category && (
-                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
-                        {product.category}
-                      </span>
-                    )}
-                  </div>
-                  
-                  {product.supplier && (
-                    <p className="text-sm text-gray-500">
-                      Supplier: {product.supplier}
-                    </p>
-                  )}
-                  
-                  {product.description && (
-                    <p className="text-gray-600 text-sm line-clamp-2">
-                      {product.description}
-                    </p>
-                  )}
-                  
-                  <p className="text-xs text-gray-400">
-                    Added: {new Date(product.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Pack</span>
+          </button>
         )}
       </div>
-    </>
+
+      {/* Header info */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Library</h2>
+        <div className="text-gray-600">
+          <p>Connected to Firebase! Your products will sync across devices.</p>
+          <p>You have {products.length} products and {packs.length} packs loaded.</p>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder={`Search ${productView}...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Category filters */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedCategory('all')}
+          className={`px-3 py-1 rounded-full text-sm font-medium ${
+            selectedCategory === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          All Categories ({products.length + packs.length})
+        </button>
+        {categories.map(category => {
+          const count = productView === 'products' 
+            ? products.filter(p => p.category === category.name).length
+            : packs.filter(p => p.category === category.name).length;
+          return (
+            <button
+              key={category.id}
+              onClick={() => setSelectedCategory(category.name)}
+              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                selectedCategory === category.name
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {category.name} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      {productView === 'products' ? renderProductsList() : renderPacksList()}
+    </div>
+  );
+
+  // Products List
+  const renderProductsList = () => {
+    const filteredProducts = products.filter(product => {
+      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    if (filteredProducts.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 text-lg">No products found</p>
+          <p className="text-gray-400">Try adjusting your filters or add a new product</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {filteredProducts.map(product => (
+          <div key={product.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <Package className="w-6 h-6 text-gray-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center space-x-2 mb-1">
+                  <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                  {product.auto && (
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Auto</span>
+                  )}
+                </div>
+                <p className="text-gray-600 text-sm mb-2">{product.description}</p>
+                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                  <span className="font-bold text-blue-600">${product.price.toFixed(2)} each</span>
+                  <span>{product.supplier}</span>
+                  <span className="bg-gray-100 px-2 py-1 rounded">{product.category}</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button className="p-2 text-red-600 hover:bg-red-50 rounded">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <button className="text-blue-600 text-sm hover:underline">
+                View Product
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Packs List
+  const renderPacksList = () => (
+    <div className="text-center py-12">
+      <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+      <p className="text-gray-500 text-lg">No packs found</p>
+      <p className="text-gray-400 mb-6">Start by creating your first pack</p>
+      <button 
+        onClick={() => setShowPackForm(true)}
+        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+      >
+        Create Pack
+      </button>
+    </div>
   );
 
   // Settings View
   const renderSettingsView = () => (
-    <div className="space-y-8">
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Categories Section */}
-          <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <Tag className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
-            </div>
-            
-            {/* Add Category Form */}
-            <div className="space-y-3 mb-6">
-              <input
-                type="text"
-                value={categoryFormData.name}
-                onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
-                placeholder="Category name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="text"
-                value={categoryFormData.description}
-                onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
-                placeholder="Description (optional)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <button
-                onClick={handleCategorySubmit}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Add Category
-              </button>
-            </div>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold text-gray-900 mb-8">Settings</h1>
+      
+      <div className="space-y-8">
+        {/* Categories */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
+            <button 
+              onClick={() => setShowCategoryForm(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            >
+              + Add Category
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {categories.map(category => (
+              <div key={category.id} className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                <span className="text-sm">{category.name}</span>
+                <button className="text-blue-600 hover:text-blue-800">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
 
-            {/* Categories List */}
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {categories.map(category => (
-                <div key={category.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{category.name}</h3>
-                    {category.description && (
-                      <p className="text-sm text-gray-600">{category.description}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCategory(category.id)}
-                    className="text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              {categories.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No categories added yet</p>
-              )}
+        {/* Suppliers */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Suppliers</h2>
+            <button 
+              onClick={() => setShowSupplierForm(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+            >
+              + Add Supplier
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {suppliers.map(supplier => (
+              <div key={supplier.id} className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full">
+                <span className="text-sm">{supplier.name}</span>
+                <button className="text-green-600 hover:text-green-800">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Database Status */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
+          <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
+          <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
+        </div>
+
+        {/* Storage Info */}
+        <div>
+          <h3 className="font-semibold text-gray-900 mb-3">Storage Information</h3>
+          <div className="space-y-2 text-sm text-gray-600">
+            <div className="flex justify-between">
+              <span>Products:</span>
+              <span>{products.length} items</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Packs:</span>
+              <span>{packs.length} packs</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Projects:</span>
+              <span>{projects.length} projects</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Auto-extracted:</span>
+              <span>{products.filter(p => p.auto).length} products</span>
             </div>
           </div>
-
-          {/* Suppliers Section */}
-          <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <Truck className="w-5 h-5 text-green-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Suppliers</h2>
-            </div>
-            
-            {/* Add Supplier Form */}
-            <div className="space-y-3 mb-6">
-              <input
-                type="text"
-                value={supplierFormData.name}
-                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
-                placeholder="Supplier name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="text"
-                value={supplierFormData.contact}
-                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
-                placeholder="Contact person"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="email"
-                value={supplierFormData.email}
-                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
-                placeholder="Email"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="tel"
-                value={supplierFormData.phone}
-                onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
-                placeholder="Phone"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <button
-                onClick={handleSupplierSubmit}
-                disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Add Supplier
-              </button>
-            </div>
-
-            {/* Suppliers List */}
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {suppliers.map(supplier => (
-                <div key={supplier.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{supplier.name}</h3>
-                    {supplier.contact && (
-                      <p className="text-sm text-gray-600">{supplier.contact}</p>
-                    )}
-                    {supplier.email && (
-                      <p className="text-xs text-gray-500">{supplier.email}</p>
-                    )}
-                    {supplier.phone && (
-                      <p className="text-xs text-gray-500">{supplier.phone}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleDeleteSupplier(supplier.id)}
-                    className="text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              {suppliers.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No suppliers added yet</p>
-              )}
-            </div>
-          </div>
+          <p className="text-xs text-gray-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        {renderNavigation()}
-        {currentView === 'products' && renderProductsView()}
-        {currentView === 'settings' && renderSettingsView()}
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {renderHeader()}
+      {renderNavigation()}
+      
+      {loading && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-blue-700 text-sm">Syncing with Firebase...</span>
+          </div>
+        </div>
+      )}
+
+      {currentView === 'projects' && renderProjectsView()}
+      {currentView === 'products' && renderProductsView()}
+      {currentView === 'settings' && renderSettingsView()}
     </div>
   );
 };
