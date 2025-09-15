@@ -787,9 +787,9 @@ const App = () => {
                     <option key={category.id} value={category.name}>
                       {category.name}
                     </option>
-                  ))}
+                   })
                 </select>
-</div>
+            </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Supplier
@@ -804,7 +804,7 @@ const App = () => {
                     <option key={supplier.id} value={supplier.name}>
                       {supplier.name}
                     </option>
-                  ))}
+                  })
                 </select>
               </div>
             </div>
