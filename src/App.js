@@ -28,12 +28,6 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   
-  // Market Search states
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  
   // Form data
   const [projectFormData, setProjectFormData] = useState({
     name: '',
@@ -238,8 +232,7 @@ const App = () => {
       setLoading(false);
     }
   };
-
-  // Pack functions
+// Pack functions
   const handlePackSubmit = async (e) => {
     e.preventDefault();
     
@@ -279,57 +272,6 @@ const App = () => {
       } finally {
         setLoading(false);
       }
-    }
-  };
-
-  // Market Search functions
-  const searchMarketProducts = async (query) => {
-    if (!query.trim()) return;
-    
-    setSearchLoading(true);
-    try {
-      const response = await fetch(`https://parts-finder-backend.onrender.com/search?q=${encodeURIComponent(query)}`);
-      
-      if (!response.ok) {
-        throw new Error('Search API not available');
-      }
-      
-      const results = await response.json();
-      setSearchResults(results || []);
-      setShowSearchModal(true);
-    } catch (error) {
-      console.error('Error searching market:', error);
-      alert('Market search is currently unavailable. You can still add products manually.');
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const addProductFromSearch = async (searchProduct) => {
-    setLoading(true);
-    try {
-      const productData = {
-        name: searchProduct.name,
-        price: parseFloat(searchProduct.price) || 0,
-        description: searchProduct.description || `Product from ${searchProduct.store}`,
-        category: 'Electronics',
-        supplier: searchProduct.store || 'Market Search',
-        auto: true,
-        url: searchProduct.url,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, 'products'), productData);
-      await loadData();
-      setShowSearchModal(false);
-      alert('Product added successfully from market search!');
-    } catch (error) {
-      console.error('Error adding product from search:', error);
-      alert('Error adding product to database');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -405,6 +347,49 @@ const App = () => {
   };
 
   const handleDeleteSupplier = async (id) => {
+
+    // Pack functions
+  const handlePackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!packFormData.name) {
+      alert('Please enter pack name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const packData = {
+        ...packFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'packs'), packData);
+      await loadData();
+      setPackFormData({ name: '', description: '', category: '', products: [] });
+      setShowPackForm(false);
+    } catch (error) {
+      console.error('Error saving pack:', error);
+      alert('Error saving pack');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePack = async (id) => {
+    if (window.confirm('Are you sure you want to delete this pack?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'packs', id));
+        await loadData();
+      } catch (error) {
+        console.error('Error deleting pack:', error);
+        alert('Error deleting pack');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
     if (window.confirm('Are you sure you want to delete this supplier?')) {
       setLoading(true);
       try {
@@ -618,40 +603,23 @@ const App = () => {
           </button>
         </div>
         
-        <div className="flex space-x-2">
+        {productView === 'products' ? (
           <button 
-            onClick={() => {
-              const query = prompt('Enter product name to search:');
-              if (query) {
-                setSearchQuery(query);
-                searchMarketProducts(query);
-              }
-            }}
-            disabled={searchLoading}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-400"
+            onClick={() => setShowProductForm(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            <Search className="w-4 h-4" />
-            <span>{searchLoading ? 'Searching...' : 'Search Market'}</span>
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
           </button>
-          
-          {productView === 'products' ? (
-            <button 
-              onClick={() => setShowProductForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Product</span>
-            </button>
-          ) : (
-            <button 
-              onClick={() => setShowPackForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Pack</span>
-            </button>
-          )}
-        </div>
+        ) : (
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Pack</span>
+          </button>
+        )}
       </div>
 
       {/* Header info */}
@@ -662,80 +630,6 @@ const App = () => {
           <p>You have {products.length} products and {packs.length} packs loaded.</p>
         </div>
       </div>
-
-      {/* Market Search Modal */}
-      {showSearchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Market Search Results for "{searchQuery}"</h3>
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            {searchResults.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No products found for "{searchQuery}"</p>
-                <p className="text-gray-400 text-sm">Try a different search term</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {searchResults.slice(0, 20).map((product, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{product.name}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{product.description}</p>
-                        <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                          <span className="font-bold text-green-600">${product.price}</span>
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                            {product.store}
-                          </span>
-                          {product.availability && (
-                            <span className="text-green-600">{product.availability}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2 ml-4">
-                        {product.url && (
-                          
-                            href={product.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                          >
-                            View
-                          </a>
-                        )}
-                        <button
-                          onClick={() => addProductFromSearch(product)}
-                          disabled={loading}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-400"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Product Form */}
       {showProductForm && (
@@ -787,9 +681,9 @@ const App = () => {
                     <option key={category.id} value={category.name}>
                       {category.name}
                     </option>
-                   })
+                  ))}
                 </select>
-            </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Supplier
@@ -804,7 +698,7 @@ const App = () => {
                     <option key={supplier.id} value={supplier.name}>
                       {supplier.name}
                     </option>
-                  })
+                  ))}
                 </select>
               </div>
             </div>
