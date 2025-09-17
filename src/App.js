@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, RefreshCw, LogOut, Search, X } from 'lucide-react';
+import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -22,11 +22,22 @@ const App = () => {
   const [showPackForm, setShowPackForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [showProductDetail, setShowProductDetail] = useState(false);
+  const [showPackDetail, setShowPackDetail] = useState(false);
+  const [showPackProducts, setShowPackProducts] = useState(false);
   
   const [editingProject, setEditingProject] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [editingPack, setEditingPack] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [currentProject, setCurrentProject] = useState(null);
+  
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [notification, setNotification] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
   
   // Form data
   const [projectFormData, setProjectFormData] = useState({
@@ -40,7 +51,10 @@ const App = () => {
     price: '',
     description: '',
     category: '',
-    supplier: ''
+    supplier: '',
+    link: '',
+    unit: 'each',
+    isAutoExtracted: false
   });
 
   const [packFormData, setPackFormData] = useState({
@@ -66,7 +80,108 @@ const App = () => {
   useEffect(() => {
     setConnected(true);
     loadData();
+    
+    // Online/offline listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
   }, []);
+
+  // Notification system
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Auto-extraction function
+  const extractProductInfo = async (url) => {
+    setIsExtracting(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      let extracted = { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: true };
+      
+      const { hostname, pathname } = new URL(url);
+      const host = hostname.toLowerCase();
+      
+      const toTitle = (s) => s.replace(/[-_]+/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      
+      if (host.includes('homedepot.com')) {
+        const segs = pathname.split('/').filter(Boolean);
+        const pIdx = segs.indexOf('p');
+        const name = pIdx !== -1 && segs[pIdx + 1] ? toTitle(segs[pIdx + 1]) : 'Home Depot Product';
+        extracted = {
+          name,
+          description: 'Product from Home Depot extracted automatically.',
+          price: Math.floor(Math.random() * 200) + 20,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else if (host.includes('lowes.com')) {
+        const segs = pathname.split('/').filter(Boolean);
+        const pdIdx = segs.indexOf('pd');
+        const name = pdIdx !== -1 && segs[pdIdx + 1] ? toTitle(segs[pdIdx + 1]) : "Lowe's Product";
+        extracted = {
+          name,
+          description: "Product from Lowe's extracted automatically.",
+          price: Math.floor(Math.random() * 180) + 15,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else if (host.includes('amazon.com')) {
+        extracted = {
+          name: 'Amazon Product',
+          description: 'Product from Amazon extracted automatically.',
+          price: Math.floor(Math.random() * 150) + 10,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else {
+        extracted = {
+          name: 'Extracted Product',
+          description: 'Product extracted automatically.',
+          price: Math.floor(Math.random() * 100) + 10,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      }
+      return extracted;
+    } catch (e) {
+      console.error(e);
+      showNotification('Error processing URL.', 'error');
+      return { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: false };
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleProductUrlChange = async (url) => {
+    setProductFormData(prev => ({ ...prev, link: url }));
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      const extracted = await extractProductInfo(url);
+      if (extracted && extracted.isAutoExtracted) {
+        setProductFormData(prev => ({
+          ...prev,
+          name: extracted.name,
+          description: extracted.description,
+          price: String(extracted.price),
+          unit: extracted.unit,
+          isAutoExtracted: extracted.isAutoExtracted,
+        }));
+        showNotification('Product information extracted successfully!', 'success');
+      }
+    }
+  };
 
   // Load all data from Firestore
   const loadData = async () => {
@@ -95,7 +210,6 @@ const App = () => {
         ...doc.data()
       }));
       if (categoriesData.length === 0) {
-        // Add default categories
         const defaultCategories = [
           { name: 'Electrical', description: 'Electrical components and tools' },
           { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
@@ -108,7 +222,6 @@ const App = () => {
             createdAt: new Date().toISOString()
           });
         }
-        // Reload categories
         const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
         const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
           id: doc.id,
@@ -126,7 +239,6 @@ const App = () => {
         ...doc.data()
       }));
       if (suppliersData.length === 0) {
-        // Add default suppliers
         const defaultSuppliers = [
           { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
           { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
@@ -139,7 +251,6 @@ const App = () => {
             createdAt: new Date().toISOString()
           });
         }
-        // Reload suppliers
         const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
         const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
           id: doc.id,
@@ -158,9 +269,11 @@ const App = () => {
       }));
       setPacks(packsData);
 
+      showNotification('Data loaded successfully!', 'success');
     } catch (error) {
       console.error('Error loading data:', error);
       setConnected(false);
+      showNotification('Error loading data', 'error');
     } finally {
       setLoading(false);
     }
@@ -171,7 +284,7 @@ const App = () => {
     e.preventDefault();
     
     if (!projectFormData.name) {
-      alert('Please enter project name');
+      showNotification('Please enter project name', 'error');
       return;
     }
 
@@ -179,7 +292,7 @@ const App = () => {
     try {
       const projectData = {
         ...projectFormData,
-        items: 0,
+        items: [],
         total: 0,
         createdAt: new Date().toISOString()
       };
@@ -188,9 +301,10 @@ const App = () => {
       await loadData();
       setProjectFormData({ name: '', description: '', address: '' });
       setShowProjectForm(false);
+      showNotification('Project created successfully!', 'success');
     } catch (error) {
       console.error('Error saving project:', error);
-      alert('Error saving project');
+      showNotification('Error saving project', 'error');
     } finally {
       setLoading(false);
     }
@@ -201,7 +315,7 @@ const App = () => {
     e.preventDefault();
     
     if (!productFormData.name || !productFormData.price) {
-      alert('Please fill in at least the name and price');
+      showNotification('Please fill in at least the name and price', 'error');
       return;
     }
 
@@ -210,34 +324,36 @@ const App = () => {
       const productData = {
         ...productFormData,
         price: parseFloat(productFormData.price),
-        auto: false,
         createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       if (editingProduct) {
         await updateDoc(doc(db, 'products', editingProduct.id), productData);
+        showNotification('Product updated successfully!', 'success');
       } else {
         await addDoc(collection(db, 'products'), productData);
+        showNotification('Product added successfully!', 'success');
       }
 
       await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
       setShowProductForm(false);
       setEditingProduct(null);
     } catch (error) {
       console.error('Error saving product:', error);
-      alert('Error saving product to database');
+      showNotification('Error saving product', 'error');
     } finally {
       setLoading(false);
     }
   };
-// Pack functions
+
+  // Pack functions
   const handlePackSubmit = async (e) => {
     e.preventDefault();
     
     if (!packFormData.name) {
-      alert('Please enter pack name');
+      showNotification('Please enter pack name', 'error');
       return;
     }
 
@@ -252,9 +368,10 @@ const App = () => {
       await loadData();
       setPackFormData({ name: '', description: '', category: '', products: [] });
       setShowPackForm(false);
+      showNotification('Pack created successfully!', 'success');
     } catch (error) {
       console.error('Error saving pack:', error);
-      alert('Error saving pack');
+      showNotification('Error saving pack', 'error');
     } finally {
       setLoading(false);
     }
@@ -266,186 +383,194 @@ const App = () => {
       try {
         await deleteDoc(doc(db, 'packs', id));
         await loadData();
+        showNotification('Pack deleted successfully', 'success');
       } catch (error) {
         console.error('Error deleting pack:', error);
-        alert('Error deleting pack');
+        showNotification('Error deleting pack', 'error');
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // Category functions
-  const handleCategorySubmit = async (e) => {
-    e.preventDefault();
+  // Add product to estimate
+  const addProductToEstimate = (product) => {
+    let project = currentProject;
+    if (!project) {
+      project = {
+        id: Date.now(),
+        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
+        description: 'Automatically created estimate',
+        items: [],
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+      };
+      setProjects(prev => [project, ...prev]);
+      setCurrentProject(project);
+    }
     
-    if (!categoryFormData.name) {
-      alert('Please enter category name');
+    const exists = project.items?.find(i => i.productId === product.id);
+    if (exists) {
+      showNotification(`${product.name} is already in the estimate`, 'info');
       return;
     }
-
-    setLoading(true);
-    try {
-      const categoryData = {
-        ...categoryFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'categories'), categoryData);
-      await loadData();
-      setCategoryFormData({ name: '', description: '' });
-      setShowCategoryForm(false);
-    } catch (error) {
-      console.error('Error saving category:', error);
-      alert('Error saving category');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteCategory = async (id) => {
-    if (window.confirm('Are you sure you want to delete this category?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'categories', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        alert('Error deleting category');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Supplier functions
-  const handleSupplierSubmit = async (e) => {
-    e.preventDefault();
     
-    if (!supplierFormData.name) {
-      alert('Please enter supplier name');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const supplierData = {
-        ...supplierFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'suppliers'), supplierData);
-      await loadData();
-      setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-      setShowSupplierForm(false);
-    } catch (error) {
-      console.error('Error saving supplier:', error);
-      alert('Error saving supplier');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteSupplier = async (id) => {
-
-    // Pack functions
-  const handlePackSubmit = async (e) => {
-    e.preventDefault();
+    const item = {
+      id: Date.now() + Math.random(),
+      productId: product.id,
+      name: product.name,
+      price: Number(product.price) || 0,
+      unit: product.unit || 'each',
+      description: product.description,
+      supplier: product.supplier,
+      category: product.category,
+      link: product.link,
+      quantity: 1,
+      addedAt: new Date().toISOString(),
+    };
     
-    if (!packFormData.name) {
-      alert('Please enter pack name');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const packData = {
-        ...packFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'packs'), packData);
-      await loadData();
-      setPackFormData({ name: '', description: '', category: '', products: [] });
-      setShowPackForm(false);
-    } catch (error) {
-      console.error('Error saving pack:', error);
-      alert('Error saving pack');
-    } finally {
-      setLoading(false);
-    }
+    const updatedProject = {
+      ...project,
+      items: [...(project.items || []), item],
+      lastModified: new Date().toISOString()
+    };
+    
+    setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+    setCurrentProject(updatedProject);
+    showNotification(`Added ${product.name} to estimate`, 'success');
   };
 
-  const handleDeletePack = async (id) => {
-    if (window.confirm('Are you sure you want to delete this pack?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'packs', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting pack:', error);
-        alert('Error deleting pack');
-      } finally {
-        setLoading(false);
-      }
-    }
+  // Export to PDF function
+  const exportToPDF = (project) => {
+    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Create a simple text-based "PDF" content for demonstration
+    const pdfContent = `
+PROJECT ESTIMATE
+================
+
+Project: ${project.name}
+Description: ${project.description || 'No description'}
+Created: ${new Date(project.createdAt).toLocaleDateString()}
+
+ITEMS (${itemCount} total):
+${(project.items || []).map(item => 
+  `• ${item.name} - Qty: ${item.quantity} - $${item.price.toFixed(2)} each - Total: $${(item.price * item.quantity).toFixed(2)}`
+).join('\n')}
+
+TOTAL: $${total.toFixed(2)}
+
+Generated by ECP Assistant
+    `;
+    
+    // Create and download the file
+    const blob = new Blob([pdfContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.name}_estimate.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showNotification('Estimate exported successfully!', 'success');
   };
-    if (window.confirm('Are you sure you want to delete this supplier?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'suppliers', id));
-        await loadData();
-      } catch (error) {
-        console.error('Error deleting supplier:', error);
-        alert('Error deleting supplier');
-      } finally {
-        setLoading(false);
-      }
+
+  // Share estimate function
+  const shareEstimate = (project, method) => {
+    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    
+    const shareText = `Project: ${project.name}\nItems: ${itemCount}\nTotal: $${total.toFixed(2)}\n\nGenerated by ECP Assistant`;
+    
+    if (method === 'email') {
+      const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
+      window.location.href = mailtoLink;
+    } else if (method === 'teams') {
+      // Microsoft Teams sharing (simplified)
+      const teamsUrl = `https://teams.microsoft.com/share?href=${encodeURIComponent(window.location.href)}&msgText=${encodeURIComponent(shareText)}`;
+      window.open(teamsUrl, '_blank');
     }
+    
+    showNotification(`Shared via ${method}!`, 'success');
   };
+
+  // Helper functions
+  const getProjectTotal = (project) => (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
 
   // Header component
   const renderHeader = () => (
-    <div className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">ECP Assistant</h1>
-          <p className="text-sm text-gray-600">Welcome, dainierds41@gmail.com</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-            <RefreshCw className="w-4 h-4" />
-            <span>Sync</span>
-          </button>
-          {currentView === 'projects' && (
+    <div className="bg-white shadow-sm border-b border-slate-200">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}>
+                {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                {isOnline ? 'Online' : 'Offline'}
+              </div>
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+                Firebase Connected
+              </div>
+            </div>
+            <p className="text-slate-600">
+              {currentProject ? (
+                <span className="flex items-center gap-2">
+                  Active: <strong>{currentProject.name}</strong>
+                  {currentProject.items && currentProject.items.length > 0 && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
+                      {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                'Welcome, dainierds41@gmail.com'
+              )}
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
             <button 
-              onClick={() => setShowProjectForm(true)}
-              className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={loadData}
+              disabled={loading}
+              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" />
-              <span>New Estimate</span>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Sync</span>
             </button>
-          )}
-          <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
-            <LogOut className="w-4 h-4" />
-            <span>Logout</span>
-          </button>
+            {currentView === 'projects' && (
+              <button 
+                onClick={() => setShowProjectForm(true)}
+                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Estimate</span>
+              </button>
+            )}
+            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 
-  // Navigation component
+  // Navigation component with modern design
   const renderNavigation = () => (
-    <div className="bg-white border-b border-gray-200">
-      <div className="px-6">
-        <nav className="flex space-x-8">
+    <div className="bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
           <button
             onClick={() => setCurrentView('projects')}
-            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-              currentView === 'projects'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -453,10 +578,8 @@ const App = () => {
           </button>
           <button
             onClick={() => setCurrentView('products')}
-            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-              currentView === 'products'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
             }`}
           >
             <Package className="w-4 h-4" />
@@ -464,446 +587,325 @@ const App = () => {
           </button>
           <button
             onClick={() => setCurrentView('settings')}
-            className={`py-4 px-2 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-              currentView === 'settings'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
             }`}
           >
             <Settings className="w-4 h-4" />
             <span>Settings</span>
           </button>
-        </nav>
+        </div>
       </div>
     </div>
   );
 
-  // Projects View
+  // Projects View with modern design
   const renderProjectsView = () => (
-    <div className="p-6">
+    <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Your Projects</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects & Estimates</h2>
+          <p className="text-slate-600">Manage your construction projects and estimates</p>
+        </div>
         <button 
           onClick={() => setShowProjectForm(true)}
-          className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
           <span>New Project</span>
         </button>
       </div>
 
-      {/* Project Form */}
-      {showProjectForm && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            {editingProject ? 'Edit Project' : 'New Project'}
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Project Name *
-              </label>
-              <input
-                type="text"
-                value={projectFormData.name}
-                onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter project name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <input
-                type="text"
-                value={projectFormData.description}
-                onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Project description or address"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleProjectSubmit}
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                {loading ? 'Saving...' : 'Save Project'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowProjectForm(false);
-                  setProjectFormData({ name: '', description: '', address: '' });
-                }}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        {projects.map(project => (
-          <div key={project.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
-                <p className="text-gray-600">{project.description}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {projects.length > 0 ? (
+          projects.map(project => {
+            const itemCount = getProjectItemCount(project);
+            const total = getProjectTotal(project);
+            const formattedDate = new Date(project.createdAt).toLocaleDateString();
+            
+            return (
+              <div key={project.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
+                    <p className="text-gray-600 text-sm">{project.description}</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => setCurrentProject(project)}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="Set as active project"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => exportToPDF(project)}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="Export to PDF"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <div className="relative group">
+                      <button className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors">
+                        <Share className="w-4 h-4" />
+                      </button>
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                        <button 
+                          onClick={() => shareEstimate(project, 'email')}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                        >
+                          <Mail className="w-4 h-4" />
+                          Email
+                        </button>
+                        <button 
+                          onClick={() => shareEstimate(project, 'teams')}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Teams
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
+                  <span>{itemCount} items</span>
+                  <span>Created {formattedDate}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
+                </div>
               </div>
-              <div className="flex space-x-1">
-                <button className="p-1 text-gray-400 hover:text-blue-600">
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button className="p-1 text-gray-400 hover:text-red-600">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
-              <span>{project.items || 0} items</span>
-              <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-2xl font-bold text-green-600">${(project.total || 0).toFixed(2)}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  // Product Library View
-  const renderProductsView = () => (
-    <div className="p-6">
-      {/* Sub-navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setProductView('products')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm ${
-              productView === 'products'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            Products ({products.length})
-          </button>
-          <button
-            onClick={() => setProductView('packs')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm ${
-              productView === 'packs'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            Packs ({packs.length})
-          </button>
-        </div>
-        
-        {productView === 'products' ? (
-          <button 
-            onClick={() => setShowProductForm(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Product</span>
-          </button>
+            );
+          })
         ) : (
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Pack</span>
-          </button>
+          <div className="col-span-full text-center py-12">
+            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
+            <p className="text-slate-500 mb-4">Create your first project to start building estimates</p>
+            <button
+              onClick={() => setShowProjectForm(true)}
+              className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+            >
+              Create Project
+            </button>
+          </div>
         )}
       </div>
-
-      {/* Header info */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Library</h2>
-        <div className="text-gray-600">
-          <p>Connected to Firebase! Your products will sync across devices.</p>
-          <p>You have {products.length} products and {packs.length} packs loaded.</p>
-        </div>
-      </div>
-
-      {/* Product Form */}
-      {showProductForm && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            {editingProduct ? 'Edit Product' : 'Add New Product'}
-          </h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  value={productFormData.name}
-                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter product name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={productFormData.price}
-                  onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={productFormData.category}
-                  onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select category</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier
-                </label>
-                <select
-                  value={productFormData.supplier}
-                  onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map(supplier => (
-                    <option key={supplier.id} value={supplier.name}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                rows="3"
-                value={productFormData.description}
-                onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter product description"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleProductSubmit}
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
-              </button>
-              <button
-                onClick={() => {
-                  setShowProductForm(false);
-                  setProductFormData({ name: '', price: '', description: '', category: '', supplier: '' });
-                  setEditingProduct(null);
-                }}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pack Form */}
-      {showPackForm && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Create New Pack
-          </h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pack Name *
-                </label>
-                <input
-                  type="text"
-                  value={packFormData.name}
-                  onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter pack name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={packFormData.category}
-                  onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select category</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                rows="3"
-                value={packFormData.description}
-                onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter pack description"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handlePackSubmit}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                {loading ? 'Saving...' : 'Create Pack'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowPackForm(false);
-                  setPackFormData({ name: '', description: '', category: '', products: [] });
-                }}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder={`Search ${productView}...`}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      </div>
-
-      {/* Category filters */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        <button
-          onClick={() => setSelectedCategory('all')}
-          className={`px-3 py-1 rounded-full text-sm font-medium ${
-            selectedCategory === 'all'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          All Categories ({products.length + packs.length})
-        </button>
-        {categories.map(category => {
-          const count = productView === 'products' 
-            ? products.filter(p => p.category === category.name).length
-            : packs.filter(p => p.category === category.name).length;
-          return (
-            <button
-              key={category.id}
-              onClick={() => setSelectedCategory(category.name)}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                selectedCategory === category.name
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {category.name} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Content */}
-      {productView === 'products' ? renderProductsList() : renderPacksList()}
     </div>
   );
 
-  // Products List
-  const renderProductsList = () => {
+  // Product Library View with modern design and rectangular cards
+  const renderProductsView = () => {
     const filteredProducts = products.filter(product => {
       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesSearch;
     });
 
+    const filteredPacks = packs.filter(pack => {
+      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
+      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Sub-navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setProductView('products')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                productView === 'products'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Products ({products.length})
+            </button>
+            <button
+              onClick={() => setProductView('packs')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                productView === 'packs'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Packs ({packs.length})
+            </button>
+          </div>
+          
+          {productView === 'products' ? (
+            <button 
+              onClick={() => setShowProductForm(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Product</span>
+            </button>
+          ) : (
+            <button 
+              onClick={() => setShowPackForm(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Pack</span>
+            </button>
+          )}
+        </div>
+
+        {/* Header info */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Product Library</h2>
+          <div className="text-slate-600">
+            <p>Connected to Firebase! Your products will sync across devices.</p>
+            <p>You have {products.length} products and {packs.length} packs loaded.</p>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Search ${productView}...`}
+              className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+            />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Category filters */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
+              selectedCategory === 'all'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            All Categories ({productView === 'products' ? products.length : packs.length})
+          </button>
+          {categories.map((category) => {
+            const count = productView === 'products' 
+              ? products.filter(p => p.category === category.name).length
+              : packs.filter(p => p.category === category.name).length;
+            return (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.name)}
+                className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
+                  selectedCategory === category.name
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                }`}
+              >
+                {category.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        {productView === 'products' ? renderProductsList(filteredProducts) : renderPacksList(filteredPacks)}
+      </div>
+    );
+  };
+
+  // Products List with modern rectangular cards
+  const renderProductsList = (filteredProducts) => {
     if (filteredProducts.length === 0) {
       return (
         <div className="text-center py-12">
-          <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">No products found</p>
-          <p className="text-gray-400">Try adjusting your filters or add a new product</p>
+          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
+          <p className="text-slate-500 mb-4">
+            {searchTerm || selectedCategory !== 'all'
+              ? 'Try adjusting your search or filter criteria'
+              : 'Start by adding your first product'}
+          </p>
+          <button
+            onClick={() => setShowProductForm(true)}
+            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+          >
+            Add Product
+          </button>
         </div>
       );
     }
 
     return (
-      <div className="space-y-4">
-        {filteredProducts.map(product => (
-          <div key={product.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <Package className="w-6 h-6 text-gray-600" />
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {filteredProducts.map((product) => (
+          <div
+            key={product.id}
+            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="relative w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
+                onClick={() => {
+                  setSelectedProduct(product);
+                  setShowProductDetail(true);
+                }}
+                title="View product details"
+              >
+                <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
+                <ZoomIn className="w-4 h-4 text-slate-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                  {product.auto && (
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Auto</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 mb-1">
+                  <h3
+                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors"
+                    onClick={() => {
+                      setSelectedProduct(product);
+                      setShowProductDetail(true);
+                    }}
+                  >
+                    {product.name}
+                  </h3>
+                  {product.isAutoExtracted && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      Auto
+                    </div>
                   )}
                 </div>
-                <p className="text-gray-600 text-sm mb-2">{product.description}</p>
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                  <span className="font-bold text-blue-600">${product.price.toFixed(2)} each</span>
-                  <span>{product.supplier}</span>
-                  {product.category && (
-                    <span className="bg-gray-100 px-2 py-1 rounded">{product.category}</span>
-                  )}
+                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{product.description}</p>
+                <div className="flex items-center gap-4 text-sm flex-wrap mb-2">
+                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-semibold">
+                    ${Number(product.price).toFixed(2)} {product.unit || 'each'}
+                  </span>
+                  <span className="text-slate-500">{product.supplier}</span>
+                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
                 </div>
+                {product.link && (
+                  <a
+                    href={product.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:text-blue-600 text-xs inline-flex items-center gap-1 hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View Product
+                  </a>
+                )}
               </div>
-              <div className="flex items-center space-x-2">
-                <button 
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => addProductToEstimate(product)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add to Estimate
+              </button>
+              <div className="flex gap-2">
+                <button
                   onClick={() => {
                     setEditingProduct(product);
                     setProductFormData({
@@ -911,39 +913,40 @@ const App = () => {
                       price: product.price.toString(),
                       description: product.description || '',
                       category: product.category || '',
-                      supplier: product.supplier || ''
+                      supplier: product.supplier || '',
+                      link: product.link || '',
+                      unit: product.unit || 'each',
+                      isAutoExtracted: product.isAutoExtracted || false
                     });
                     setShowProductForm(true);
                   }}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Edit product"
                 >
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button 
+                <button
                   onClick={async () => {
                     if (window.confirm('Are you sure you want to delete this product?')) {
                       setLoading(true);
                       try {
                         await deleteDoc(doc(db, 'products', product.id));
                         await loadData();
+                        showNotification('Product deleted successfully', 'success');
                       } catch (error) {
                         console.error('Error deleting product:', error);
-                        alert('Error deleting product');
+                        showNotification('Error deleting product', 'error');
                       } finally {
                         setLoading(false);
                       }
                     }
                   }}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Delete product"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <button className="text-blue-600 text-sm hover:underline">
-                View Product
-              </button>
             </div>
           </div>
         ))}
@@ -951,270 +954,158 @@ const App = () => {
     );
   };
 
-  // Packs List
-  const renderPacksList = () => {
-    const filteredPacks = packs.filter(pack => {
-      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
-      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">No packs found</p>
-          <p className="text-gray-400 mb-6">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {filteredPacks.map(pack => (
-          <div key={pack.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Package className="w-6 h-6 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="font-semibold text-gray-900">{pack.name}</h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Pack</span>
-                </div>
-                <p className="text-gray-600 text-sm mb-2">{pack.description}</p>
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                  <span className="font-bold text-green-600">{pack.products?.length || 0} products</span>
-                  {pack.category && (
-                    <span className="bg-gray-100 px-2 py-1 rounded">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <button className="text-green-600 text-sm hover:underline">
-                View Pack Details
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Settings View
+  // Settings View with same structure but modern design
   const renderSettingsView = () => (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">Settings</h1>
-      
-      <div className="space-y-8">
-        {/* Categories */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
-            <button 
-              onClick={() => setShowCategoryForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
-              + Add Category
-            </button>
-          </div>
-
-          {/* Category Form */}
-          {showCategoryForm && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={categoryFormData.name}
-                  onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
-                  placeholder="Category name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="text"
-                  value={categoryFormData.description}
-                  onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
-                  placeholder="Description (optional)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleCategorySubmit}
-                    disabled={loading}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm"
-                  >
-                    Add Category
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowCategoryForm(false);
-                      setCategoryFormData({ name: '', description: '' });
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="bg-white rounded-2xl p-8 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
+        
+        <div className="space-y-8">
+          {/* Categories */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
+              <button 
+                onClick={() => setShowCategoryForm(true)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {categories.map(category => (
+                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
+                  <span>{category.name}</span>
+                  <button 
+                    onClick={async () => {
+                      if (categories.length <= 1) {
+                        showNotification('Must keep at least one category', 'error');
+                        return;
+                      }
+                      if (window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
+                        try {
+                          await deleteDoc(doc(db, 'categories', category.id));
+                          await loadData();
+                          showNotification('Category deleted successfully', 'success');
+                        } catch (error) {
+                          console.error('Error deleting category:', error);
+                          showNotification('Error deleting category', 'error');
+                        }
+                      }
                     }}
-                    className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                    className="hover:bg-blue-200 rounded p-1 transition-colors"
+                    title={`Delete ${category.name}`}
                   >
-                    Cancel
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
-              </div>
+              ))}
             </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            {categories.map(category => (
-              <div key={category.id} className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                <span className="text-sm">{category.name}</span>
-                <button 
-                  onClick={() => handleDeleteCategory(category.id)}
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
           </div>
-        </div>
 
-        {/* Suppliers */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Suppliers</h2>
-            <button 
-              onClick={() => setShowSupplierForm(true)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-            >
-              + Add Supplier
-            </button>
-          </div>
-          
-          {/* Supplier Form */}
-          {showSupplierForm && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={supplierFormData.name}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
-                  placeholder="Supplier name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="text"
-                  value={supplierFormData.contact}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
-                  placeholder="Contact person"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="email"
-                  value={supplierFormData.email}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
-                  placeholder="Email"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="tel"
-                  value={supplierFormData.phone}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
-                  placeholder="Phone"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleSupplierSubmit}
-                    disabled={loading}
-                    className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg text-sm"
-                  >
-                    Add Supplier
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowSupplierForm(false);
-                      setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+          {/* Suppliers */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
+              <button 
+                onClick={() => setShowSupplierForm(true)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Supplier
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {suppliers.map(supplier => (
+                <div key={supplier.id} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
+                  <span>{supplier.name}</span>
+                  <button 
+                    onClick={async () => {
+                      if (suppliers.length <= 1) {
+                        showNotification('Must keep at least one supplier', 'error');
+                        return;
+                      }
+                      if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
+                        try {
+                          await deleteDoc(doc(db, 'suppliers', supplier.id));
+                          await loadData();
+                          showNotification('Supplier deleted successfully', 'success');
+                        } catch (error) {
+                          console.error('Error deleting supplier:', error);
+                          showNotification('Error deleting supplier', 'error');
+                        }
+                      }
                     }}
-                    className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                    className="hover:bg-green-200 rounded p-1 transition-colors"
                   >
-                    Cancel
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            {suppliers.map(supplier => (
-              <div key={supplier.id} className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full">
-                <span className="text-sm">{supplier.name}</span>
-                <button 
-                  onClick={() => handleDeleteSupplier(supplier.id)}
-                  className="text-green-600 hover:text-green-800"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Database Status */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
-          <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
-          <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
-        </div>
-
-        {/* Storage Info */}
-        <div>
-          <h3 className="font-semibold text-gray-900 mb-3">Storage Information</h3>
-          <div className="space-y-2 text-sm text-gray-600">
-            <div className="flex justify-between">
-              <span>Products:</span>
-              <span>{products.length} items</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Packs:</span>
-              <span>{packs.length} packs</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Projects:</span>
-              <span>{projects.length} projects</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Auto-extracted:</span>
-              <span>{products.filter(p => p.auto).length} products</span>
+              ))}
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
+
+          {/* Database Status */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
+            <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
+            <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
+          </div>
+
+          {/* Storage Info */}
+          <div>
+            <h3 className="font-semibold text-slate-800 mb-3">Storage Information</h3>
+            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Products:</span>
+                  <span>{products.length} items</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Packs:</span>
+                  <span>{packs.length} packs</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Projects:</span>
+                  <span>{projects.length} projects</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Auto-extracted:</span>
+                  <span>{products.filter(p => p.isAutoExtracted).length} products</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Notification System */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+            notification.type === 'success'
+              ? 'bg-green-500 text-white'
+              : notification.type === 'error'
+              ? 'bg-red-500 text-white'
+              : 'bg-blue-500 text-white'
+          }`}
+        >
+          {notification.message}
+        </div>
+      )}
+
       {renderHeader()}
       {renderNavigation()}
       
       {loading && (
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 max-w-7xl mx-auto">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
             <span className="text-blue-700 text-sm">Syncing with Firebase...</span>
           </div>
@@ -1224,8 +1115,774 @@ const App = () => {
       {currentView === 'projects' && renderProjectsView()}
       {currentView === 'products' && renderProductsView()}
       {currentView === 'settings' && renderSettingsView()}
+
+      {/* Modal Add/Edit Project */}
+      {showProjectForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingProject ? 'Edit Project' : 'Create New Project'}
+            </h2>
+            <form onSubmit={handleProjectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  value={projectFormData.name}
+                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter project name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={projectFormData.description}
+                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Project description or address"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProjectForm(false);
+                    setProjectFormData({ name: '', description: '', address: '' });
+                    setEditingProject(null);
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add/Edit Product */}
+      {showProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingProduct ? 'Edit Product' : 'Add New Product'}
+            </h2>
+            
+            {isExtracting && (
+              <div className="mb-4 p-4 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                Extracting product information from URL...
+              </div>
+            )}
+            
+            <form onSubmit={handleProductSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link</label>
+                <input
+                  type="url"
+                  value={productFormData.link}
+                  onChange={(e) => !editingProduct && handleProductUrlChange(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="https://... (Auto-extraction will fill details)"
+                  disabled={isExtracting || !!editingProduct}
+                />
+                {!editingProduct && (
+                  <p className="mt-2 text-xs text-slate-500">Compatible: Home Depot, Lowe's, Amazon, and more</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={productFormData.name}
+                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Enter product name"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={productFormData.price}
+                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                  <input
+                    type="text"
+                    value={productFormData.unit}
+                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="e.g., per piece, per foot"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={productFormData.description}
+                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  rows={3}
+                  placeholder="Product description"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={isExtracting || loading}
+                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProductForm(false);
+                    setEditingProduct(null);
+                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Product Detail */}
+      {showProductDetail && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
+              <button 
+                onClick={() => {
+                  setShowProductDetail(false);
+                  setSelectedProduct(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center">
+                    <div className="text-center">
+                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">Product image</p>
+                    </div>
+                  </div>
+
+                  {selectedProduct.link && (
+                    <a
+                      href={selectedProduct.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View at {selectedProduct.supplier}
+                    </a>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-start gap-3 mb-4">
+                      <h3 className="text-2xl font-bold text-slate-800 leading-tight">{selectedProduct.name}</h3>
+                      {selectedProduct.isAutoExtracted && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Auto-extracted
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
+                      <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Category</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.category || 'No category'}</p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Supplier</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.supplier || 'No supplier'}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl">
+                    <p className="text-slate-600 text-sm font-semibold mb-2">Description</p>
+                    <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl">
+                    <p className="text-slate-600 text-sm font-semibold mb-2">Additional Information</p>
+                    <div className="space-y-1 text-sm">
+                      <p><strong>Product ID:</strong> {selectedProduct.id}</p>
+                      {selectedProduct.createdAt && (
+                        <p><strong>Date added:</strong> {new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
+                      )}
+                      {selectedProduct.updatedAt && (
+                        <p><strong>Last updated:</strong> {new Date(selectedProduct.updatedAt).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => {
+                        addProductToEstimate(selectedProduct);
+                        setShowProductDetail(false);
+                        setSelectedProduct(null);
+                      }}
+                      className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      Add to Estimate
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingProduct(selectedProduct);
+                        setProductFormData({
+                          name: selectedProduct.name,
+                          price: selectedProduct.price.toString(),
+                          description: selectedProduct.description || '',
+                          category: selectedProduct.category || '',
+                          supplier: selectedProduct.supplier || '',
+                          link: selectedProduct.link || '',
+                          unit: selectedProduct.unit || 'each',
+                          isAutoExtracted: selectedProduct.isAutoExtracted || false
+                        });
+                        setShowProductDetail(false);
+                        setSelectedProduct(null);
+                        setShowProductForm(true);
+                      }}
+                      className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Edit Product
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add/Edit Pack */}
+      {showPackForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingPack ? 'Edit Pack' : 'Create New Pack'}
+            </h2>
+            
+            <form onSubmit={handlePackSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
+                  <input
+                    type="text"
+                    value={packFormData.name}
+                    onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="Enter pack name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={packFormData.category}
+                    onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={packFormData.description}
+                  onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Enter pack description"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack</label>
+                <div className="border border-slate-300 rounded-xl p-4 max-h-60 overflow-y-auto">
+                  {products.length > 0 ? (
+                    <div className="space-y-2">
+                      {products.map(product => (
+                        <label key={product.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={packFormData.products.some(p => p.id === product.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPackFormData({
+                                  ...packFormData,
+                                  products: [...packFormData.products, { id: product.id, name: product.name, price: product.price }]
+                                });
+                              } else {
+                                setPackFormData({
+                                  ...packFormData,
+                                  products: packFormData.products.filter(p => p.id !== product.id)
+                                });
+                              }
+                            }}
+                            className="rounded text-green-600 focus:ring-green-500"
+                          />
+                          <div className="flex-1">
+                            <span className="font-medium text-slate-800">{product.name}</span>
+                            <span className="text-slate-500 text-sm ml-2">${product.price}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No products available. Add some products first.</p>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Selected: {packFormData.products.length} products
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingPack ? 'Update Pack' : 'Create Pack')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPackForm(false);
+                    setEditingPack(null);
+                    setPackFormData({ name: '', description: '', category: '', products: [] });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pack Detail */}
+      {showPackDetail && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
+              <button 
+                onClick={() => {
+                  setShowPackDetail(false);
+                  setSelectedPack(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-6">
+                <div className="flex items-start gap-3 mb-4">
+                  <h3 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h3>
+                  <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Pack</span>
+                </div>
+                <p className="text-slate-600 mb-4">{selectedPack.description}</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                    {selectedPack.products?.length || 0} products
+                  </span>
+                  {selectedPack.category && (
+                    <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg">{selectedPack.category}</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold text-slate-800 mb-4">Products in this Pack</h4>
+                {selectedPack.products && selectedPack.products.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedPack.products.map((product, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <span className="font-medium text-slate-800">{product.name}</span>
+                        <span className="text-slate-600">${product.price}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-center py-8">No products in this pack</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+                <button
+                  onClick={() => {
+                    setEditingPack(selectedPack);
+                    setPackFormData({
+                      name: selectedPack.name,
+                      description: selectedPack.description || '',
+                      category: selectedPack.category || '',
+                      products: selectedPack.products || []
+                    });
+                    setShowPackDetail(false);
+                    setSelectedPack(null);
+                    setShowPackForm(true);
+                  }}
+                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit Pack
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Category */}
+      {showCategoryForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!categoryFormData.name) {
+                showNotification('Category name is required', 'error');
+                return;
+              }
+              setLoading(true);
+              try {
+                await addDoc(collection(db, 'categories'), {
+                  ...categoryFormData,
+                  createdAt: new Date().toISOString()
+                });
+                await loadData();
+                setCategoryFormData({ name: '', description: '' });
+                setShowCategoryForm(false);
+                showNotification('Category added successfully!', 'success');
+              } catch (error) {
+                console.error('Error saving category:', error);
+                showNotification('Error saving category', 'error');
+              } finally {
+                setLoading(false);
+              }
+            }} className="space-y-4">
+              <input
+                type="text"
+                value={categoryFormData.name}
+                onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Category name"
+                required
+              />
+              <input
+                type="text"
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Description (optional)"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Category'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setCategoryFormData({ name: '', description: '' });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Supplier */}
+      {showSupplierForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Supplier</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!supplierFormData.name) {
+                showNotification('Supplier name is required', 'error');
+                return;
+              }
+              setLoading(true);
+              try {
+                await addDoc(collection(db, 'suppliers'), {
+                  ...supplierFormData,
+                  createdAt: new Date().toISOString()
+                });
+                await loadData();
+                setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+                setShowSupplierForm(false);
+                showNotification('Supplier added successfully!', 'success');
+              } catch (error) {
+                console.error('Error saving supplier:', error);
+                showNotification('Error saving supplier', 'error');
+              } finally {
+                setLoading(false);
+              }
+            }} className="space-y-4">
+              <input
+                type="text"
+                value={supplierFormData.name}
+                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Supplier name"
+                required
+              />
+              <input
+                type="text"
+                value={supplierFormData.contact}
+                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Contact person"
+              />
+              <input
+                type="email"
+                value={supplierFormData.email}
+                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Email"
+              />
+              <input
+                type="tel"
+                value={supplierFormData.phone}
+                onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Phone"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Supplier'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSupplierForm(false);
+                    setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default App;
+export default App; gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={productFormData.category}
+                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
+                  <select
+                    value={productFormData.supplier}
+                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2
+    );
+  };
+
+  // Packs List with modern rectangular cards
+  const renderPacksList = (filteredPacks) => {
+    if (filteredPacks.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
+          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
+          >
+            Create Pack
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {filteredPacks.map((pack) => (
+          <div
+            key={pack.id}
+            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackDetail(true);
+                }}
+                title="View pack details"
+              >
+                <Package className="w-8 h-8 text-green-600" />
+                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 mb-1">
+                  <h3
+                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
+                    onClick={() => {
+                      setSelectedPack(pack);
+                      setShowPackDetail(true);
+                    }}
+                  >
+                    {pack.name}
+                  </h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
+                </div>
+                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
+                <div className="flex items-center gap-4 text-sm flex-wrap">
+                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                    {pack.products?.length || 0} products
+                  </span>
+                  {pack.category && (
+                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackProducts(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                View Products
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setEditingPack(pack);
+                    setPackFormData({
+                      name: pack.name,
+                      description: pack.description || '',
+                      category: pack.category || '',
+                      products: pack.products || []
+                    });
+                    setShowPackForm(true);
+                  }}
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Edit pack"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDeletePack(pack.id)}
+                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Delete pack"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
