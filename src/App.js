@@ -751,35 +751,27 @@ const App = () => {
         </div>
 
         <h3>PRODUCTS:</h3>
-        <table class="products-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Product Name</th>
-                    <th>Part Number/SKU</th>
-                    <th>Description</th>
-                    <th>Category</th>
-                    <th>Supplier</th>
-                    <th>Quantity</th>
-                    <th>Unit Price</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${project.items.map((item, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${item.name}</td>
-                        <td>${item.partNumber || 'N/A'}</td>
-                        <td>${item.description || 'No description'}</td>
-                        <td>${item.category || 'N/A'}</td>
-                        <td>${item.supplier || 'N/A'}</td>
-                        <td>${item.quantity}</td>
-                        <td>$${item.price.toFixed(2)}</td>
-                        <td>$${(item.price * item.quantity).toFixed(2)}</td>
-                    </tr>
-                `).join('')}
-            </tbody>
+       <table class="products-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Product Name</th>
+            <th>Part Number/SKU</th>
+            <th>Quantity</th>
+          <th>Supplier</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${project.items.map((item, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${item.name}</td>
+            <td>${item.partNumber || 'N/A'}</td>
+            <td>${item.quantity}</td>
+            <td>${item.supplier || 'N/A'}</td>
+             </tr>
+          `).join('')}
+          </tbody>
         </table>
 
         <div class="summary">
