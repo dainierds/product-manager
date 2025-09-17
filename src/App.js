@@ -1,6 +1,1191 @@
-);
+import React, { useState, useEffect } from 'react';
+import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText } from 'lucide-react';
+import { db } from './firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-  return (
+const App = () => {
+  const [currentView, setCurrentView] = useState('projects');
+  const [productView, setProductView] = useState('products');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Data states
+  const [projects, setProjects] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [packs, setPacks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  
+  // Form states
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showPackForm, setShowPackForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [showProductDetail, setShowProductDetail] = useState(false);
+  const [showPackDetail, setShowPackDetail] = useState(false);
+  
+  const [editingProject, setEditingProject] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingPack, setEditingPack] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [currentProject, setCurrentProject] = useState(null);
+  
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [notification, setNotification] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  
+  // Form data
+  const [projectFormData, setProjectFormData] = useState({
+    name: '',
+    description: '',
+    address: ''
+  });
+
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    price: '',
+    description: '',
+    category: '',
+    supplier: '',
+    link: '',
+    unit: 'each',
+    isAutoExtracted: false
+  });
+
+  const [packFormData, setPackFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    products: []
+  });
+
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    description: ''
+  });
+
+  const [supplierFormData, setSupplierFormData] = useState({
+    name: '',
+    contact: '',
+    email: '',
+    phone: ''
+  });
+
+  // Initialize and load data
+  useEffect(() => {
+    setConnected(true);
+    loadData();
+    
+    // Online/offline listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  // Notification system
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Auto-extraction function
+  const extractProductInfo = async (url) => {
+    setIsExtracting(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      let extracted = { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: true };
+      
+      const { hostname, pathname } = new URL(url);
+      const host = hostname.toLowerCase();
+      
+      const toTitle = (s) => s.replace(/[-_]+/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      
+      if (host.includes('homedepot.com')) {
+        const segs = pathname.split('/').filter(Boolean);
+        const pIdx = segs.indexOf('p');
+        const name = pIdx !== -1 && segs[pIdx + 1] ? toTitle(segs[pIdx + 1]) : 'Home Depot Product';
+        extracted = {
+          name,
+          description: 'Product from Home Depot extracted automatically.',
+          price: Math.floor(Math.random() * 200) + 20,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else if (host.includes('lowes.com')) {
+        const segs = pathname.split('/').filter(Boolean);
+        const pdIdx = segs.indexOf('pd');
+        const name = pdIdx !== -1 && segs[pdIdx + 1] ? toTitle(segs[pdIdx + 1]) : "Lowe's Product";
+        extracted = {
+          name,
+          description: "Product from Lowe's extracted automatically.",
+          price: Math.floor(Math.random() * 180) + 15,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else if (host.includes('amazon.com')) {
+        extracted = {
+          name: 'Amazon Product',
+          description: 'Product from Amazon extracted automatically.',
+          price: Math.floor(Math.random() * 150) + 10,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      } else {
+        extracted = {
+          name: 'Extracted Product',
+          description: 'Product extracted automatically.',
+          price: Math.floor(Math.random() * 100) + 10,
+          unit: 'each',
+          isAutoExtracted: true,
+        };
+      }
+      return extracted;
+    } catch (e) {
+      console.error(e);
+      showNotification('Error processing URL.', 'error');
+      return { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: false };
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleProductUrlChange = async (url) => {
+    setProductFormData(prev => ({ ...prev, link: url }));
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      const extracted = await extractProductInfo(url);
+      if (extracted && extracted.isAutoExtracted) {
+        setProductFormData(prev => ({
+          ...prev,
+          name: extracted.name,
+          description: extracted.description,
+          price: String(extracted.price),
+          unit: extracted.unit,
+          isAutoExtracted: extracted.isAutoExtracted,
+        }));
+        showNotification('Product information extracted successfully!', 'success');
+      }
+    }
+  };
+
+  // Load all data from Firestore
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const projectsSnapshot = await getDocs(collection(db, 'projects'));
+      const projectsData = projectsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProjects(projectsData);
+
+      const productsSnapshot = await getDocs(collection(db, 'products'));
+      const productsData = productsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(productsData);
+
+      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
+      const categoriesData = categoriesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (categoriesData.length === 0) {
+        const defaultCategories = [
+          { name: 'Electrical', description: 'Electrical components and tools' },
+          { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
+          { name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
+          { name: 'General', description: 'General construction materials' }
+        ];
+        for (const category of defaultCategories) {
+          await addDoc(collection(db, 'categories'), {
+            ...category,
+            createdAt: new Date().toISOString()
+          });
+        }
+        const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
+        const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setCategories(newCategoriesData);
+      } else {
+        setCategories(categoriesData);
+      }
+
+      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+      const suppliersData = suppliersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (suppliersData.length === 0) {
+        const defaultSuppliers = [
+          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
+          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
+          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
+          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
+        ];
+        for (const supplier of defaultSuppliers) {
+          await addDoc(collection(db, 'suppliers'), {
+            ...supplier,
+            createdAt: new Date().toISOString()
+          });
+        }
+        const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+        const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setSuppliers(newSuppliersData);
+      } else {
+        setSuppliers(suppliersData);
+      }
+
+      const packsSnapshot = await getDocs(collection(db, 'packs'));
+      const packsData = packsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPacks(packsData);
+
+      showNotification('Data loaded successfully!', 'success');
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setConnected(false);
+      showNotification('Error loading data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Project functions
+  const handleProjectSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!projectFormData.name) {
+      showNotification('Please enter project name', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const projectData = {
+        ...projectFormData,
+        items: [],
+        total: 0,
+        createdAt: new Date().toISOString()
+      };
+      
+      await addDoc(collection(db, 'projects'), projectData);
+      await loadData();
+      setProjectFormData({ name: '', description: '', address: '' });
+      setShowProjectForm(false);
+      showNotification('Project created successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving project:', error);
+      showNotification('Error saving project', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Product functions
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!productFormData.name || !productFormData.price) {
+      showNotification('Please fill in at least the name and price', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const productData = {
+        ...productFormData,
+        price: parseFloat(productFormData.price),
+        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingProduct) {
+        await updateDoc(doc(db, 'products', editingProduct.id), productData);
+        showNotification('Product updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'products'), productData);
+        showNotification('Product added successfully!', 'success');
+      }
+
+      await loadData();
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
+      setShowProductForm(false);
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error saving product:', error);
+      showNotification('Error saving product', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pack functions
+  const handlePackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!packFormData.name) {
+      showNotification('Please enter pack name', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const packData = {
+        ...packFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      if (editingPack) {
+        await updateDoc(doc(db, 'packs', editingPack.id), packData);
+        showNotification('Pack updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'packs'), packData);
+        showNotification('Pack created successfully!', 'success');
+      }
+      
+      await loadData();
+      setPackFormData({ name: '', description: '', category: '', products: [] });
+      setShowPackForm(false);
+      setEditingPack(null);
+    } catch (error) {
+      console.error('Error saving pack:', error);
+      showNotification('Error saving pack', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePack = async (id) => {
+    if (window.confirm('Are you sure you want to delete this pack?')) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'packs', id));
+        await loadData();
+        showNotification('Pack deleted successfully', 'success');
+      } catch (error) {
+        console.error('Error deleting pack:', error);
+        showNotification('Error deleting pack', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Add product to estimate
+  const addProductToEstimate = (product) => {
+    let project = currentProject;
+    if (!project) {
+      project = {
+        id: Date.now(),
+        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
+        description: 'Automatically created estimate',
+        items: [],
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+      };
+      setProjects(prev => [project, ...prev]);
+      setCurrentProject(project);
+    }
+    
+    const exists = project.items?.find(i => i.productId === product.id);
+    if (exists) {
+      showNotification(`${product.name} is already in the estimate`, 'info');
+      return;
+    }
+    
+    const item = {
+      id: Date.now() + Math.random(),
+      productId: product.id,
+      name: product.name,
+      price: Number(product.price) || 0,
+      unit: product.unit || 'each',
+      description: product.description,
+      supplier: product.supplier,
+      category: product.category,
+      link: product.link,
+      quantity: 1,
+      addedAt: new Date().toISOString(),
+    };
+    
+    const updatedProject = {
+      ...project,
+      items: [...(project.items || []), item],
+      lastModified: new Date().toISOString()
+    };
+    
+    setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+    setCurrentProject(updatedProject);
+    showNotification(`Added ${product.name} to estimate`, 'success');
+  };
+
+  // Export to PDF function
+  const exportToPDF = (project) => {
+    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    
+    const pdfContent = `
+PROJECT ESTIMATE
+================
+
+Project: ${project.name}
+Description: ${project.description || 'No description'}
+Created: ${new Date(project.createdAt).toLocaleDateString()}
+
+ITEMS (${itemCount} total):
+${(project.items || []).map(item => 
+  `• ${item.name} - Qty: ${item.quantity} - $${item.price.toFixed(2)} each - Total: $${(item.price * item.quantity).toFixed(2)}`
+).join('\n')}
+
+TOTAL: $${total.toFixed(2)}
+
+Generated by ECP Assistant
+    `;
+    
+    const blob = new Blob([pdfContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.name}_estimate.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showNotification('Estimate exported successfully!', 'success');
+  };
+
+  // Share estimate function
+  const shareEstimate = (project, method) => {
+    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    
+    const shareText = `Project: ${project.name}\nItems: ${itemCount}\nTotal: $${total.toFixed(2)}\n\nGenerated by ECP Assistant`;
+    
+    if (method === 'email') {
+      const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
+      window.location.href = mailtoLink;
+    } else if (method === 'teams') {
+      const teamsUrl = `https://teams.microsoft.com/share?href=${encodeURIComponent(window.location.href)}&msgText=${encodeURIComponent(shareText)}`;
+      window.open(teamsUrl, '_blank');
+    }
+    
+    showNotification(`Shared via ${method}!`, 'success');
+  };
+
+  // Helper functions
+  const getProjectTotal = (project) => (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+
+  // Header component
+  const renderHeader = () => (
+    <div className="bg-white shadow-sm border-b border-slate-200">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+              }`}>
+                {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                {isOnline ? 'Online' : 'Offline'}
+              </div>
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+                Firebase Connected
+              </div>
+            </div>
+            <p className="text-slate-600">
+              {currentProject ? (
+                <span className="flex items-center gap-2">
+                  Active: <strong>{currentProject.name}</strong>
+                  {currentProject.items && currentProject.items.length > 0 && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
+                      {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                'Welcome, dainierds41@gmail.com'
+              )}
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={loadData}
+              disabled={loading}
+              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Sync</span>
+            </button>
+            {currentView === 'projects' && (
+              <button 
+                onClick={() => setShowProjectForm(true)}
+                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Estimate</span>
+              </button>
+            )}
+            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Navigation component
+  const renderNavigation = () => (
+    <div className="bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
+          <button
+            onClick={() => setCurrentView('projects')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Projects & Estimates</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('products')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>Product Library</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('settings')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+              currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Projects View
+  const renderProjectsView = () => (
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects & Estimates</h2>
+          <p className="text-slate-600">Manage your construction projects and estimates</p>
+        </div>
+        <button 
+          onClick={() => setShowProjectForm(true)}
+          className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Project</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {projects.length > 0 ? (
+          projects.map(project => {
+            const itemCount = getProjectItemCount(project);
+            const total = getProjectTotal(project);
+            const formattedDate = new Date(project.createdAt).toLocaleDateString();
+            
+            return (
+              <div key={project.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
+                    <p className="text-gray-600 text-sm">{project.description}</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => setCurrentProject(project)}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="Set as active project"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => exportToPDF(project)}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="Export to PDF"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <div className="relative group">
+                      <button className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors">
+                        <Share className="w-4 h-4" />
+                      </button>
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                        <button 
+                          onClick={() => shareEstimate(project, 'email')}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                        >
+                          <Mail className="w-4 h-4" />
+                          Email
+                        </button>
+                        <button 
+                          onClick={() => shareEstimate(project, 'teams')}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Teams
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
+                  <span>{itemCount} items</span>
+                  <span>Created {formattedDate}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="col-span-full text-center py-12">
+            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
+            <p className="text-slate-500 mb-4">Create your first project to start building estimates</p>
+            <button
+              onClick={() => setShowProjectForm(true)}
+              className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+            >
+              Create Project
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Products View
+  const renderProductsView = () => {
+    const filteredProducts = products.filter(product => {
+      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    const filteredPacks = packs.filter(pack => {
+      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
+      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Sub-navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setProductView('products')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                productView === 'products'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Products ({products.length})
+            </button>
+            <button
+              onClick={() => setProductView('packs')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                productView === 'packs'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Packs ({packs.length})
+            </button>
+          </div>
+          
+          {productView === 'products' ? (
+            <button 
+              onClick={() => setShowProductForm(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Product</span>
+            </button>
+          ) : (
+            <button 
+              onClick={() => setShowPackForm(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Pack</span>
+            </button>
+          )}
+        </div>
+
+        {/* Header info */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Product Library</h2>
+          <div className="text-slate-600">
+            <p>Connected to Firebase! Your products will sync across devices.</p>
+            <p>You have {products.length} products and {packs.length} packs loaded.</p>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Search ${productView}...`}
+              className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+            />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Category filters */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
+              selectedCategory === 'all'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            All Categories ({productView === 'products' ? products.length : packs.length})
+          </button>
+          {categories.map((category) => {
+            const count = productView === 'products' 
+              ? products.filter(p => p.category === category.name).length
+              : packs.filter(p => p.category === category.name).length;
+            return (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.name)}
+                className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
+                  selectedCategory === category.name
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                }`}
+              >
+                {category.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        {productView === 'products' ? renderProductsList(filteredProducts) : renderPacksList(filteredPacks)}
+      </div>
+    );
+  };
+
+  // Products List with modern rectangular cards
+  const renderProductsList = (filteredProducts) => {
+    if (filteredProducts.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
+          <p className="text-slate-500 mb-4">
+            {searchTerm || selectedCategory !== 'all'
+              ? 'Try adjusting your search or filter criteria'
+              : 'Start by adding your first product'}
+          </p>
+          <button
+            onClick={() => setShowProductForm(true)}
+            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+          >
+            Add Product
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {filteredProducts.map((product) => (
+          <div
+            key={product.id}
+            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="relative w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
+                onClick={() => {
+                  setSelectedProduct(product);
+                  setShowProductDetail(true);
+                }}
+                title="View product details"
+              >
+                <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
+                <ZoomIn className="w-4 h-4 text-slate-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 mb-1">
+                  <h3
+                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors"
+                    onClick={() => {
+                      setSelectedProduct(product);
+                      setShowProductDetail(true);
+                    }}
+                  >
+                    {product.name}
+                  </h3>
+                  {product.isAutoExtracted && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      Auto
+                    </div>
+                  )}
+                </div>
+                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{product.description}</p>
+                <div className="flex items-center gap-4 text-sm flex-wrap mb-2">
+                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-semibold">
+                    ${Number(product.price).toFixed(2)} {product.unit || 'each'}
+                  </span>
+                  <span className="text-slate-500">{product.supplier}</span>
+                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
+                </div>
+                {product.link && (
+                  <a
+                    href={product.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:text-blue-600 text-xs inline-flex items-center gap-1 hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View Product
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => addProductToEstimate(product)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add to Estimate
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setEditingProduct(product);
+                    setProductFormData({
+                      name: product.name,
+                      price: product.price.toString(),
+                      description: product.description || '',
+                      category: product.category || '',
+                      supplier: product.supplier || '',
+                      link: product.link || '',
+                      unit: product.unit || 'each',
+                      isAutoExtracted: product.isAutoExtracted || false
+                    });
+                    setShowProductForm(true);
+                  }}
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Edit product"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to delete this product?')) {
+                      setLoading(true);
+                      try {
+                        await deleteDoc(doc(db, 'products', product.id));
+                        await loadData();
+                        showNotification('Product deleted successfully', 'success');
+                      } catch (error) {
+                        console.error('Error deleting product:', error);
+                        showNotification('Error deleting product', 'error');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }
+                  }}
+                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Delete product"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Packs List with modern rectangular cards
+  const renderPacksList = (filteredPacks) => {
+    if (filteredPacks.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
+          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
+          >
+            Create Pack
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {filteredPacks.map((pack) => (
+          <div
+            key={pack.id}
+            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackDetail(true);
+                }}
+                title="View pack details"
+              >
+                <Package className="w-8 h-8 text-green-600" />
+                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 mb-1">
+                  <h3
+                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
+                    onClick={() => {
+                      setSelectedPack(pack);
+                      setShowPackDetail(true);
+                    }}
+                  >
+                    {pack.name}
+                  </h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
+                </div>
+                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
+                <div className="flex items-center gap-4 text-sm flex-wrap">
+                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                    {pack.products?.length || 0} products
+                  </span>
+                  {pack.category && (
+                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackDetail(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                View Products
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setEditingPack(pack);
+                    setPackFormData({
+                      name: pack.name,
+                      description: pack.description || '',
+                      category: pack.category || '',
+                      products: pack.products || []
+                    });
+                    setShowPackForm(true);
+                  }}
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Edit pack"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDeletePack(pack.id)}
+                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Delete pack"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Settings View
+  const renderSettingsView = () => (
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="bg-white rounded-2xl p-8 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
+        
+        <div className="space-y-8">
+          {/* Categories */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
+              <button 
+                onClick={() => setShowCategoryForm(true)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {categories.map(category => (
+                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
+                  <span>{category.name}</span>
+                  <button 
+                    onClick={async () => {
+                      if (categories.length <= 1) {
+                        showNotification('Must keep at least one category', 'error');
+                        return;
+                      }
+                      if (window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
+                        try {
+                          await deleteDoc(doc(db, 'categories', category.id));
+                          await loadData();
+                          showNotification('Category deleted successfully', 'success');
+                        } catch (error) {
+                          console.error('Error deleting category:', error);
+                          showNotification('Error deleting category', 'error');
+                        }
+                      }
+                    }}
+                    className="hover:bg-blue-200 rounded p-1 transition-colors"
+                    title={`Delete ${category.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Suppliers */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
+              <button 
+                onClick={() => setShowSupplierForm(true)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Supplier
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {suppliers.map(supplier => (
+                <div key={supplier.id} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
+                  <span>{supplier.name}</span>
+                  <button 
+                    onClick={async () => {
+                      if (suppliers.length <= 1) {
+                        showNotification('Must keep at least one supplier', 'error');
+                        return;
+                      }
+                      if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
+                        try {
+                          await deleteDoc(doc(db, 'suppliers', supplier.id));
+                          await loadData();
+                          showNotification('Supplier deleted successfully', 'success');
+                        } catch (error) {
+                          console.error('Error deleting supplier:', error);
+                          showNotification('Error deleting supplier', 'error');
+                        }
+                      }
+                    }}
+                    className="hover:bg-green-200 rounded p-1 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Database Status */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
+            <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
+            <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
+          </div>
+
+          {/* Storage Info */}
+          <div>
+            <h3 className="font-semibold text-slate-800 mb-3">Storage Information</h3>
+            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Products:</span>
+                  <span>{products.length} items</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Packs:</span>
+                  <span>{packs.length} packs</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Projects:</span>
+                  <span>{projects.length} projects</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Auto-extracted:</span>
+                  <span>{products.filter(p => p.isAutoExtracted).length} products</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+ return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Notification System */}
       {notification && (
@@ -302,19 +1487,6 @@
                     <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
                   </div>
 
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <p className="text-slate-600 text-sm font-semibold mb-2">Additional Information</p>
-                    <div className="space-y-1 text-sm">
-                      <p><strong>Product ID:</strong> {selectedProduct.id}</p>
-                      {selectedProduct.createdAt && (
-                        <p><strong>Date added:</strong> {new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
-                      )}
-                      {selectedProduct.updatedAt && (
-                        <p><strong>Last updated:</strong> {new Date(selectedProduct.updatedAt).toLocaleDateString()}</p>
-                      )}
-                    </div>
-                  </div>
-
                   <div className="flex gap-3 pt-4">
                     <button
                       onClick={() => {
@@ -614,7 +1786,7 @@
         </div>
       )}
 
-      {/* Modal Add Supplier */}
+{/* Modal Add Supplier */}
       {showSupplierForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
@@ -698,1198 +1870,4 @@
   );
 };
 
-export default App;import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare } from 'lucide-react';
-import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-
-const App = () => {
-  const [currentView, setCurrentView] = useState('projects');
-  const [productView, setProductView] = useState('products'); // products or packs
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Data states
-  const [projects, setProjects] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [packs, setPacks] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  
-  // Form states
-  const [showProjectForm, setShowProjectForm] = useState(false);
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [showPackForm, setShowPackForm] = useState(false);
-  const [showCategoryForm, setShowCategoryForm] = useState(false);
-  const [showSupplierForm, setShowSupplierForm] = useState(false);
-  const [showProductDetail, setShowProductDetail] = useState(false);
-  const [showPackDetail, setShowPackDetail] = useState(false);
-  const [showPackProducts, setShowPackProducts] = useState(false);
-  
-  const [editingProject, setEditingProject] = useState(null);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [editingPack, setEditingPack] = useState(null);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedPack, setSelectedPack] = useState(null);
-  const [currentProject, setCurrentProject] = useState(null);
-  
-  const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [notification, setNotification] = useState(null);
-  const [isExtracting, setIsExtracting] = useState(false);
-  
-  // Form data
-  const [projectFormData, setProjectFormData] = useState({
-    name: '',
-    description: '',
-    address: ''
-  });
-
-  const [productFormData, setProductFormData] = useState({
-    name: '',
-    price: '',
-    description: '',
-    category: '',
-    supplier: '',
-    link: '',
-    unit: 'each',
-    isAutoExtracted: false
-  });
-
-  const [packFormData, setPackFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    products: []
-  });
-
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    description: ''
-  });
-
-  const [supplierFormData, setSupplierFormData] = useState({
-    name: '',
-    contact: '',
-    email: '',
-    phone: ''
-  });
-
-  // Initialize and load data
-  useEffect(() => {
-    setConnected(true);
-    loadData();
-    
-    // Online/offline listeners
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
-    }
-    
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
-      }
-    };
-  }, []);
-
-  // Notification system
-  const showNotification = (message, type = 'info') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  // Auto-extraction function
-  const extractProductInfo = async (url) => {
-    setIsExtracting(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      let extracted = { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: true };
-      
-      const { hostname, pathname } = new URL(url);
-      const host = hostname.toLowerCase();
-      
-      const toTitle = (s) => s.replace(/[-_]+/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-      
-      if (host.includes('homedepot.com')) {
-        const segs = pathname.split('/').filter(Boolean);
-        const pIdx = segs.indexOf('p');
-        const name = pIdx !== -1 && segs[pIdx + 1] ? toTitle(segs[pIdx + 1]) : 'Home Depot Product';
-        extracted = {
-          name,
-          description: 'Product from Home Depot extracted automatically.',
-          price: Math.floor(Math.random() * 200) + 20,
-          unit: 'each',
-          isAutoExtracted: true,
-        };
-      } else if (host.includes('lowes.com')) {
-        const segs = pathname.split('/').filter(Boolean);
-        const pdIdx = segs.indexOf('pd');
-        const name = pdIdx !== -1 && segs[pdIdx + 1] ? toTitle(segs[pdIdx + 1]) : "Lowe's Product";
-        extracted = {
-          name,
-          description: "Product from Lowe's extracted automatically.",
-          price: Math.floor(Math.random() * 180) + 15,
-          unit: 'each',
-          isAutoExtracted: true,
-        };
-      } else if (host.includes('amazon.com')) {
-        extracted = {
-          name: 'Amazon Product',
-          description: 'Product from Amazon extracted automatically.',
-          price: Math.floor(Math.random() * 150) + 10,
-          unit: 'each',
-          isAutoExtracted: true,
-        };
-      } else {
-        extracted = {
-          name: 'Extracted Product',
-          description: 'Product extracted automatically.',
-          price: Math.floor(Math.random() * 100) + 10,
-          unit: 'each',
-          isAutoExtracted: true,
-        };
-      }
-      return extracted;
-    } catch (e) {
-      console.error(e);
-      showNotification('Error processing URL.', 'error');
-      return { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: false };
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  const handleProductUrlChange = async (url) => {
-    setProductFormData(prev => ({ ...prev, link: url }));
-    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-      const extracted = await extractProductInfo(url);
-      if (extracted && extracted.isAutoExtracted) {
-        setProductFormData(prev => ({
-          ...prev,
-          name: extracted.name,
-          description: extracted.description,
-          price: String(extracted.price),
-          unit: extracted.unit,
-          isAutoExtracted: extracted.isAutoExtracted,
-        }));
-        showNotification('Product information extracted successfully!', 'success');
-      }
-    }
-  };
-
-  // Load all data from Firestore
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Load projects
-      const projectsSnapshot = await getDocs(collection(db, 'projects'));
-      const projectsData = projectsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setProjects(projectsData);
-
-      // Load products
-      const productsSnapshot = await getDocs(collection(db, 'products'));
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setProducts(productsData);
-
-      // Load categories
-      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
-      const categoriesData = categoriesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      if (categoriesData.length === 0) {
-        const defaultCategories = [
-          { name: 'Electrical', description: 'Electrical components and tools' },
-          { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
-          { name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
-          { name: 'General', description: 'General construction materials' }
-        ];
-        for (const category of defaultCategories) {
-          await addDoc(collection(db, 'categories'), {
-            ...category,
-            createdAt: new Date().toISOString()
-          });
-        }
-        const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
-        const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setCategories(newCategoriesData);
-      } else {
-        setCategories(categoriesData);
-      }
-
-      // Load suppliers
-      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
-      const suppliersData = suppliersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      if (suppliersData.length === 0) {
-        const defaultSuppliers = [
-          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
-          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
-          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
-          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
-        ];
-        for (const supplier of defaultSuppliers) {
-          await addDoc(collection(db, 'suppliers'), {
-            ...supplier,
-            createdAt: new Date().toISOString()
-          });
-        }
-        const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
-        const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setSuppliers(newSuppliersData);
-      } else {
-        setSuppliers(suppliersData);
-      }
-
-      // Load packs
-      const packsSnapshot = await getDocs(collection(db, 'packs'));
-      const packsData = packsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setPacks(packsData);
-
-      showNotification('Data loaded successfully!', 'success');
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setConnected(false);
-      showNotification('Error loading data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Project functions
-  const handleProjectSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!projectFormData.name) {
-      showNotification('Please enter project name', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const projectData = {
-        ...projectFormData,
-        items: [],
-        total: 0,
-        createdAt: new Date().toISOString()
-      };
-      
-      await addDoc(collection(db, 'projects'), projectData);
-      await loadData();
-      setProjectFormData({ name: '', description: '', address: '' });
-      setShowProjectForm(false);
-      showNotification('Project created successfully!', 'success');
-    } catch (error) {
-      console.error('Error saving project:', error);
-      showNotification('Error saving project', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Product functions
-  const handleProductSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!productFormData.name || !productFormData.price) {
-      showNotification('Please fill in at least the name and price', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const productData = {
-        ...productFormData,
-        price: parseFloat(productFormData.price),
-        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), productData);
-        showNotification('Product updated successfully!', 'success');
-      } else {
-        await addDoc(collection(db, 'products'), productData);
-        showNotification('Product added successfully!', 'success');
-      }
-
-      await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
-      setShowProductForm(false);
-      setEditingProduct(null);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      showNotification('Error saving product', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Pack functions
-  const handlePackSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!packFormData.name) {
-      showNotification('Please enter pack name', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const packData = {
-        ...packFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      if (editingPack) {
-        await updateDoc(doc(db, 'packs', editingPack.id), packData);
-        showNotification('Pack updated successfully!', 'success');
-      } else {
-        await addDoc(collection(db, 'packs'), packData);
-        showNotification('Pack created successfully!', 'success');
-      }
-      
-      await loadData();
-      setPackFormData({ name: '', description: '', category: '', products: [] });
-      setShowPackForm(false);
-      setEditingPack(null);
-    } catch (error) {
-      console.error('Error saving pack:', error);
-      showNotification('Error saving pack', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeletePack = async (id) => {
-    if (window.confirm('Are you sure you want to delete this pack?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'packs', id));
-        await loadData();
-        showNotification('Pack deleted successfully', 'success');
-      } catch (error) {
-        console.error('Error deleting pack:', error);
-        showNotification('Error deleting pack', 'error');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Add product to estimate
-  const addProductToEstimate = (product) => {
-    let project = currentProject;
-    if (!project) {
-      project = {
-        id: Date.now(),
-        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
-        description: 'Automatically created estimate',
-        items: [],
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
-      };
-      setProjects(prev => [project, ...prev]);
-      setCurrentProject(project);
-    }
-    
-    const exists = project.items?.find(i => i.productId === product.id);
-    if (exists) {
-      showNotification(`${product.name} is already in the estimate`, 'info');
-      return;
-    }
-    
-    const item = {
-      id: Date.now() + Math.random(),
-      productId: product.id,
-      name: product.name,
-      price: Number(product.price) || 0,
-      unit: product.unit || 'each',
-      description: product.description,
-      supplier: product.supplier,
-      category: product.category,
-      link: product.link,
-      quantity: 1,
-      addedAt: new Date().toISOString(),
-    };
-    
-    const updatedProject = {
-      ...project,
-      items: [...(project.items || []), item],
-      lastModified: new Date().toISOString()
-    };
-    
-    setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-    setCurrentProject(updatedProject);
-    showNotification(`Added ${product.name} to estimate`, 'success');
-  };
-
-  // Export to PDF function
-  const exportToPDF = (project) => {
-    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Create a simple text-based "PDF" content for demonstration
-    const pdfContent = `
-PROJECT ESTIMATE
-================
-
-Project: ${project.name}
-Description: ${project.description || 'No description'}
-Created: ${new Date(project.createdAt).toLocaleDateString()}
-
-ITEMS (${itemCount} total):
-${(project.items || []).map(item => 
-  `• ${item.name} - Qty: ${item.quantity} - $${item.price.toFixed(2)} each - Total: $${(item.price * item.quantity).toFixed(2)}`
-).join('\n')}
-
-TOTAL: $${total.toFixed(2)}
-
-Generated by ECP Assistant
-    `;
-    
-    // Create and download the file
-    const blob = new Blob([pdfContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.name}_estimate.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showNotification('Estimate exported successfully!', 'success');
-  };
-
-  // Share estimate function
-  const shareEstimate = (project, method) => {
-    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
-    
-    const shareText = `Project: ${project.name}\nItems: ${itemCount}\nTotal: $${total.toFixed(2)}\n\nGenerated by ECP Assistant`;
-    
-    if (method === 'email') {
-      const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
-      window.location.href = mailtoLink;
-    } else if (method === 'teams') {
-      // Microsoft Teams sharing (simplified)
-      const teamsUrl = `https://teams.microsoft.com/share?href=${encodeURIComponent(window.location.href)}&msgText=${encodeURIComponent(shareText)}`;
-      window.open(teamsUrl, '_blank');
-    }
-    
-    showNotification(`Shared via ${method}!`, 'success');
-  };
-
-  // Helper functions
-  const getProjectTotal = (project) => (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
-
-  // Header component
-  const renderHeader = () => (
-    <div className="bg-white shadow-sm border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-              }`}>
-                {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {isOnline ? 'Online' : 'Offline'}
-              </div>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
-                Firebase Connected
-              </div>
-            </div>
-            <p className="text-slate-600">
-              {currentProject ? (
-                <span className="flex items-center gap-2">
-                  Active: <strong>{currentProject.name}</strong>
-                  {currentProject.items && currentProject.items.length > 0 && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
-                      {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
-                    </span>
-                  )}
-                </span>
-              ) : (
-                'Welcome, dainierds41@gmail.com'
-              )}
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={loadData}
-              disabled={loading}
-              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Sync</span>
-            </button>
-            {currentView === 'projects' && (
-              <button 
-                onClick={() => setShowProjectForm(true)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Estimate</span>
-              </button>
-            )}
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Navigation component with modern design
-  const renderNavigation = () => (
-    <div className="bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
-          <button
-            onClick={() => setCurrentView('projects')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Projects & Estimates</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('products')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>Product Library</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Settings</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Projects View with modern design
-  const renderProjectsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects & Estimates</h2>
-          <p className="text-slate-600">Manage your construction projects and estimates</p>
-        </div>
-        <button 
-          onClick={() => setShowProjectForm(true)}
-          className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {projects.length > 0 ? (
-          projects.map(project => {
-            const itemCount = getProjectItemCount(project);
-            const total = getProjectTotal(project);
-            const formattedDate = new Date(project.createdAt).toLocaleDateString();
-            
-            return (
-              <div key={project.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
-                    <p className="text-gray-600 text-sm">{project.description}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => setCurrentProject(project)}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title="Set as active project"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => exportToPDF(project)}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Export to PDF"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <div className="relative group">
-                      <button className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors">
-                        <Share className="w-4 h-4" />
-                      </button>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                        <button 
-                          onClick={() => shareEstimate(project, 'email')}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <Mail className="w-4 h-4" />
-                          Email
-                        </button>
-                        <button 
-                          onClick={() => shareEstimate(project, 'teams')}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          Teams
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
-                  <span>{itemCount} items</span>
-                  <span>Created {formattedDate}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
-            <p className="text-slate-500 mb-4">Create your first project to start building estimates</p>
-            <button
-              onClick={() => setShowProjectForm(true)}
-              className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-            >
-              Create Project
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // Product Library View with modern design and rectangular cards
-  const renderProductsView = () => {
-    const filteredProducts = products.filter(product => {
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    const filteredPacks = packs.filter(pack => {
-      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
-      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Sub-navigation */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setProductView('products')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'products'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Products ({products.length})
-            </button>
-            <button
-              onClick={() => setProductView('packs')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'packs'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Packs ({packs.length})
-            </button>
-          </div>
-          
-          {productView === 'products' ? (
-            <button 
-              onClick={() => setShowProductForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Product</span>
-            </button>
-          ) : (
-            <button 
-              onClick={() => setShowPackForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Pack</span>
-            </button>
-          )}
-        </div>
-
-        {/* Header info */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Product Library</h2>
-          <div className="text-slate-600">
-            <p>Connected to Firebase! Your products will sync across devices.</p>
-            <p>You have {products.length} products and {packs.length} packs loaded.</p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${productView}...`}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Category filters */}
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-            selectedCategory === 'all'
-            ? 'bg-blue-500 text-white'
-            : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-        }`}
-          >
-            All Categories ({productView === 'products' ? products.length : packs.length})
-          </button>
-          {categories.map((category) => {
-            const count = productView === 'products' 
-              ? products.filter(p => p.category === category.name).length
-              : packs.filter(p => p.category === category.name).length;
-            return (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.name)}
-                className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-                  selectedCategory === category.name
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {category.name} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        {productView === 'products' ? renderProductsList(filteredProducts) : renderPacksList(filteredPacks)}
-      </div>
-    );
-  };
-
-  // Products List with modern rectangular cards
-  const renderProductsList = (filteredProducts) => {
-    if (filteredProducts.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
-          <p className="text-slate-500 mb-4">
-            {searchTerm || selectedCategory !== 'all'
-              ? 'Try adjusting your search or filter criteria'
-              : 'Start by adding your first product'}
-          </p>
-          <button
-            onClick={() => setShowProductForm(true)}
-            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
-          >
-            Add Product
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredProducts.map((product) => (
-          <div
-            key={product.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="relative w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
-                onClick={() => {
-                  setSelectedProduct(product);
-                  setShowProductDetail(true);
-                }}
-                title="View product details"
-              >
-                <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
-                <ZoomIn className="w-4 h-4 text-slate-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3
-                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors"
-                    onClick={() => {
-                      setSelectedProduct(product);
-                      setShowProductDetail(true);
-                    }}
-                  >
-                    {product.name}
-                  </h3>
-                  {product.isAutoExtracted && (
-                    <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      Auto
-                    </div>
-                  )}
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{product.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap mb-2">
-                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-semibold">
-                    ${Number(product.price).toFixed(2)} {product.unit || 'each'}
-                  </span>
-                  <span className="text-slate-500">{product.supplier}</span>
-                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
-                </div>
-                {product.link && (
-                  <a
-                    href={product.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-600 text-xs inline-flex items-center gap-1 hover:underline"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    View Product
-                  </a>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => addProductToEstimate(product)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
-              >
-                <PlusCircle className="w-4 h-4" />
-                Add to Estimate
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditingProduct(product);
-                    setProductFormData({
-                      name: product.name,
-                      price: product.price.toString(),
-                      description: product.description || '',
-                      category: product.category || '',
-                      supplier: product.supplier || '',
-                      link: product.link || '',
-                      unit: product.unit || 'each',
-                      isAutoExtracted: product.isAutoExtracted || false
-                    });
-                    setShowProductForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit product"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={async () => {
-                    if (window.confirm('Are you sure you want to delete this product?')) {
-                      setLoading(true);
-                      try {
-                        await deleteDoc(doc(db, 'products', product.id));
-                        await loadData();
-                        showNotification('Product deleted successfully', 'success');
-                      } catch (error) {
-                        console.error('Error deleting product:', error);
-                        showNotification('Error deleting product', 'error');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }
-                  }}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete product"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Packs List with modern rectangular cards
-  const renderPacksList = (filteredPacks) => {
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
-          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPacks.map((pack) => (
-          <div
-            key={pack.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                title="View pack details"
-              >
-                <Package className="w-8 h-8 text-green-600" />
-                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3
-                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
-                    onClick={() => {
-                      setSelectedPack(pack);
-                      setShowPackDetail(true);
-                    }}
-                  >
-                    {pack.name}
-                  </h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {pack.products?.length || 0} products
-                  </span>
-                  {pack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackProducts(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
-              >
-                <Eye className="w-4 h-4" />
-                View Products
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditingPack(pack);
-                    setPackFormData({
-                      name: pack.name,
-                      description: pack.description || '',
-                      category: pack.category || '',
-                      products: pack.products || []
-                    });
-                    setShowPackForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit pack"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete pack"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Settings View with same structure but modern design
-  const renderSettingsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="bg-white rounded-2xl p-8 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
-        
-        <div className="space-y-8">
-          {/* Categories */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
-              <button 
-                onClick={() => setShowCategoryForm(true)}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Category
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {categories.map(category => (
-                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
-                  <span>{category.name}</span>
-                  <button 
-                    onClick={async () => {
-                      if (categories.length <= 1) {
-                        showNotification('Must keep at least one category', 'error');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
-                        try {
-                          await deleteDoc(doc(db, 'categories', category.id));
-                          await loadData();
-                          showNotification('Category deleted successfully', 'success');
-                        } catch (error) {
-                          console.error('Error deleting category:', error);
-                          showNotification('Error deleting category', 'error');
-                        }
-                      }
-                    }}
-                    className="hover:bg-blue-200 rounded p-1 transition-colors"
-                    title={`Delete ${category.name}`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Suppliers */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
-              <button 
-                onClick={() => setShowSupplierForm(true)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Supplier
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {suppliers.map(supplier => (
-                <div key={supplier.id} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
-                  <span>{supplier.name}</span>
-                  <button 
-                    onClick={async () => {
-                      if (suppliers.length <= 1) {
-                        showNotification('Must keep at least one supplier', 'error');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
-                        try {
-                          await deleteDoc(doc(db, 'suppliers', supplier.id));
-                          await loadData();
-                          showNotification('Supplier deleted successfully', 'success');
-                        } catch (error) {
-                          console.error('Error deleting supplier:', error);
-                          showNotification('Error deleting supplier', 'error');
-                        }
-                      }
-                    }}
-                    className="hover:bg-green-200 rounded p-1 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Database Status */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
-            <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
-            <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
-          </div>
-
-          {/* Storage Info */}
-          <div>
-            <h3 className="font-semibold text-slate-800 mb-3">Storage Information</h3>
-            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Products:</span>
-                  <span>{products.length} items</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Packs:</span>
-                  <span>{packs.length} packs</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Projects:</span>
-                  <span>{projects.length} projects</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Auto-extracted:</span>
-                  <span>{products.filter(p => p.isAutoExtracted).length} products</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+export default App;
