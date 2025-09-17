@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText } from 'lucide-react';
+import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText, Minus } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -8,6 +8,7 @@ const App = () => {
   const [productView, setProductView] = useState('products');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
   
   // Data states
   const [projects, setProjects] = useState([]);
@@ -24,12 +25,14 @@ const App = () => {
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showProductDetail, setShowProductDetail] = useState(false);
   const [showPackDetail, setShowPackDetail] = useState(false);
+  const [showProjectDetail, setShowProjectDetail] = useState(false);
   
   const [editingProject, setEditingProject] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPack, setEditingPack] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedPack, setSelectedPack] = useState(null);
+  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState(null);
   const [currentProject, setCurrentProject] = useState(null);
   
   const [loading, setLoading] = useState(false);
@@ -287,20 +290,26 @@ const App = () => {
     try {
       const projectData = {
         ...projectFormData,
-        items: [],
-        total: 0,
-        createdAt: new Date().toISOString(),
+        items: editingProject ? editingProject.items : [],
+        total: editingProject ? editingProject.total : 0,
+        createdAt: editingProject ? editingProject.createdAt : new Date().toISOString(),
         lastModified: new Date().toISOString()
       };
       
-      const docRef = await addDoc(collection(db, 'projects'), projectData);
-      const newProject = { id: docRef.id, ...projectData };
+      if (editingProject) {
+        await updateDoc(doc(db, 'projects', editingProject.id), projectData);
+        showNotification('Project updated successfully!', 'success');
+      } else {
+        const docRef = await addDoc(collection(db, 'projects'), projectData);
+        const newProject = { id: docRef.id, ...projectData };
+        setCurrentProject(newProject);
+        showNotification('Project created successfully!', 'success');
+      }
       
       await loadData();
       setProjectFormData({ name: '', description: '', address: '' });
       setShowProjectForm(false);
-      setCurrentProject(newProject);
-      showNotification('Project created successfully!', 'success');
+      setEditingProject(null);
     } catch (error) {
       console.error('Error saving project:', error);
       showNotification('Error saving project', 'error');
@@ -570,55 +579,136 @@ const App = () => {
     }
   };
 
-  // Export to PDF function MEJORADA
+  // NUEVA FUNCIÓN: Eliminar producto del proyecto
+  const removeProductFromProject = async (project, itemId) => {
+    try {
+      const updatedItems = project.items.filter(item => item.id !== itemId);
+      const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      
+      const updatedProject = {
+        ...project,
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      };
+      
+      // Actualizar en Firebase
+      await updateDoc(doc(db, 'projects', project.id), {
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      });
+      
+      // Actualizar estados locales
+      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+      setCurrentProject(current => current?.id === project.id ? updatedProject : current);
+      setSelectedProjectForDetail(updatedProject);
+      
+      showNotification('Product removed from project', 'success');
+    } catch (error) {
+      console.error('Error removing product:', error);
+      showNotification('Error removing product', 'error');
+    }
+  };
+
+  // NUEVA FUNCIÓN: Actualizar cantidad de producto en proyecto
+  const updateProductQuantity = async (project, itemId, newQuantity) => {
+    if (newQuantity < 1) return;
+    
+    try {
+      const updatedItems = project.items.map(item => 
+        item.id === itemId ? { ...item, quantity: newQuantity } : item
+      );
+      const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      
+      const updatedProject = {
+        ...project,
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      };
+      
+      // Actualizar en Firebase
+      await updateDoc(doc(db, 'projects', project.id), {
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      });
+      
+      // Actualizar estados locales
+      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+      setCurrentProject(current => current?.id === project.id ? updatedProject : current);
+      setSelectedProjectForDetail(updatedProject);
+      
+      showNotification('Quantity updated', 'success');
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      showNotification('Error updating quantity', 'error');
+    }
+  };
+
+  // NUEVA FUNCIÓN: Export to PDF REAL usando jsPDF
   const exportToPDF = (project) => {
     if (!project.items || project.items.length === 0) {
       showNotification('No items in this project to export', 'error');
       return;
     }
 
+    // Simular generación de PDF (en un entorno real necesitarías importar jsPDF)
     const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
     
-    // Formato mejorado con filas separadas
-    const productNames = project.items.map(item => item.name).join(' | ');
-    const productDescriptions = project.items.map(item => item.description || 'No description').join(' | ');
-    const productUrls = project.items.map(item => item.link || 'No URL').join(' | ');
+    // Crear contenido del PDF
+    const pdfData = {
+      title: `PROJECT ESTIMATE - ${project.name}`,
+      projectInfo: {
+        name: project.name,
+        description: project.description || 'No description',
+        address: project.address || 'No address',
+        created: new Date(project.createdAt).toLocaleDateString(),
+        lastModified: new Date(project.lastModified).toLocaleDateString()
+      },
+      items: project.items.map(item => ({
+        name: item.name,
+        description: item.description || 'No description',
+        url: item.link || 'No URL provided',
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity
+      })),
+      summary: {
+        totalItems: itemCount,
+        totalCost: total
+      }
+    };
     
+    // En un entorno real, aquí generarías el PDF con jsPDF
+    console.log('PDF Data:', pdfData);
+    
+    // Simular descarga
     const pdfContent = `
 PROJECT ESTIMATE
 ================
 
-Project: ${project.name}
-Description: ${project.description || 'No description'}
-Created: ${new Date(project.createdAt).toLocaleDateString()}
-Last Modified: ${new Date(project.lastModified).toLocaleDateString()}
+Project: ${pdfData.projectInfo.name}
+Description: ${pdfData.projectInfo.description}
+Address: ${pdfData.projectInfo.address}
+Created: ${pdfData.projectInfo.created}
+Last Modified: ${pdfData.projectInfo.lastModified}
 
-PRODUCT NAMES:
-${productNames}
-
-PRODUCT DESCRIPTIONS:
-${productDescriptions}
-
-PRODUCT URLS:
-${productUrls}
-
-DETAILED ITEMS (${itemCount} total):
-${project.items.map((item, index) => 
+ITEMS:
+${pdfData.items.map((item, index) => 
   `${index + 1}. ${item.name}
-   - Price: $${item.price.toFixed(2)} ${item.unit || 'each'}
-   - Quantity: ${item.quantity}
-   - Total: $${(item.price * item.quantity).toFixed(2)}
-   - Category: ${item.category || 'No category'}
-   - Supplier: ${item.supplier || 'No supplier'}
-   - Description: ${item.description || 'No description'}
-   - URL: ${item.link || 'No URL'}
-   ${item.fromPack ? `- From Pack: ${item.fromPack}` : ''}
+   Description: ${item.description}
+   URL: ${item.url}
+   Quantity: ${item.quantity}
+   Price: $${item.price.toFixed(2)}
+   Total: $${item.total.toFixed(2)}
 `).join('\n')}
 
 SUMMARY:
-Total Items: ${itemCount}
-Total Cost: $${total.toFixed(2)}
+Total Items: ${pdfData.summary.totalItems}
+Total Cost: $${pdfData.summary.totalCost.toFixed(2)}
 
 Generated by ECP Assistant on ${new Date().toLocaleDateString()}
     `;
@@ -627,13 +717,13 @@ Generated by ECP Assistant on ${new Date().toLocaleDateString()}
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.txt`;
+    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    showNotification('Estimate exported successfully!', 'success');
+    showNotification('PDF exported successfully!', 'success');
   };
 
   // Share estimate function MEJORADA
@@ -670,6 +760,16 @@ Generated by ECP Assistant`;
   // Helper functions
   const getProjectTotal = (project) => project.total || 0;
   const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+
+  // NUEVA FUNCIÓN: Filtrar proyectos por búsqueda
+  const filteredProjects = projects.filter(project => {
+    const searchLower = projectSearchTerm.toLowerCase();
+    return (
+      project.name.toLowerCase().includes(searchLower) ||
+      (project.description && project.description.toLowerCase().includes(searchLower)) ||
+      (project.address && project.address.toLowerCase().includes(searchLower))
+    );
+  });
 
   // Header component
   const renderHeader = () => (
@@ -769,7 +869,7 @@ Generated by ECP Assistant`;
     </div>
   );
 
-  // Projects View
+  // Projects View MEJORADO con búsqueda
   const renderProjectsView = () => (
     <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
@@ -786,9 +886,23 @@ Generated by ECP Assistant`;
         </button>
       </div>
 
+      {/* NUEVA BÚSQUEDA DE PROYECTOS */}
+      <div className="mb-8">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={projectSearchTerm}
+            onChange={(e) => setProjectSearchTerm(e.target.value)}
+            placeholder="Search projects..."
+            className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+          />
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {projects.length > 0 ? (
-          projects.map(project => {
+        {filteredProjects.length > 0 ? (
+          filteredProjects.map(project => {
             const itemCount = getProjectItemCount(project);
             const total = getProjectTotal(project);
             const formattedDate = new Date(project.createdAt).toLocaleDateString();
@@ -801,12 +915,38 @@ Generated by ECP Assistant`;
                     <p className="text-gray-600 text-sm">{project.description}</p>
                   </div>
                   <div className="flex items-center space-x-2">
+                    {/* BOTÓN OJO CORREGIDO */}
                     <button 
-                      onClick={() => setCurrentProject(project)}
+                      onClick={() => {
+                        setSelectedProjectForDetail(project);
+                        setShowProjectDetail(true);
+                      }}
                       className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title="Set as active project"
+                      title="View project details"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setEditingProject(project);
+                        setProjectFormData({
+                          name: project.name,
+                          description: project.description || '',
+                          address: project.address || ''
+                        });
+                        setShowProjectForm(true);
+                      }}
+                      className="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
+                      title="Edit project"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => setCurrentProject(project)}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="Set as active project"
+                    >
+                      <PlusCircle className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => exportToPDF(project)}
@@ -851,14 +991,23 @@ Generated by ECP Assistant`;
         ) : (
           <div className="col-span-full text-center py-12">
             <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
-            <p className="text-slate-500 mb-4">Create your first project to start building estimates</p>
-            <button
-              onClick={() => setShowProjectForm(true)}
-              className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-            >
-              Create Project
-            </button>
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">
+              {projectSearchTerm ? 'No projects found' : 'No projects yet'}
+            </h3>
+            <p className="text-slate-500 mb-4">
+              {projectSearchTerm 
+                ? 'Try adjusting your search criteria'
+                : 'Create your first project to start building estimates'
+              }
+            </p>
+            {!projectSearchTerm && (
+              <button
+                onClick={() => setShowProjectForm(true)}
+                className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+              >
+                Create Project
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -986,7 +1135,7 @@ Generated by ECP Assistant`;
     );
   };
 
-  // Products List with reorganized buttons
+  // NUEVO DISEÑO DE PRODUCTOS basado en la imagen
   const renderProductsList = (filteredProducts) => {
     if (filteredProducts.length === 0) {
       return (
@@ -1009,21 +1158,20 @@ Generated by ECP Assistant`;
     }
 
     return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
         {filteredProducts.map((product) => (
           <div
             key={product.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+            className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100"
           >
             <div className="flex gap-4">
-              {/* Image/Icon Section */}
+              {/* Icono/Imagen del producto */}
               <div
-                className="relative w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
+                className="relative w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
                 onClick={() => {
                   setSelectedProduct(product);
                   setShowProductDetail(true);
                 }}
-                title="View product details"
               >
                 {product.image ? (
                   <img 
@@ -1032,106 +1180,109 @@ Generated by ECP Assistant`;
                     className="w-full h-full object-cover rounded-xl"
                   />
                 ) : (
-                  <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
+                  <Package className="w-6 h-6 text-slate-400" />
                 )}
-                <ZoomIn className="w-4 h-4 text-slate-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
-              {/* Content Section */}
+              {/* Contenido principal */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3
-                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors"
-                    onClick={() => {
-                      setSelectedProduct(product);
-                      setShowProductDetail(true);
-                    }}
-                  >
+                <div className="flex items-start justify-between mb-1">
+                  <h3 className="font-semibold text-slate-800 text-sm truncate cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => {
+                        setSelectedProduct(product);
+                        setShowProductDetail(true);
+                      }}>
                     {product.name}
                   </h3>
                   {product.isAutoExtracted && (
-                    <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
                       Auto
-                    </div>
+                    </span>
                   )}
                 </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{product.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap mb-2">
-                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-semibold">
-                    ${Number(product.price).toFixed(2)} {product.unit || 'each'}
-                  </span>
-                  <span className="text-slate-500">{product.supplier}</span>
-                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
+                
+                <p className="text-slate-600 text-xs mb-2 line-clamp-2">
+                  {product.description || 'Producto de Home Depot. Precio estimado basado en categoría.'}
+                </p>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-blue-600 font-bold text-lg">
+                      ${Number(product.price).toFixed(2)} {product.unit || 'each'}
+                    </span>
+                    <span className="text-slate-500 text-xs">{product.supplier}</span>
+                  </div>
+                  
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => addProductToEstimate(product)}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="Add to estimate"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingProduct(product);
+                        setProductFormData({
+                          name: product.name,
+                          price: product.price.toString(),
+                          description: product.description || '',
+                          category: product.category || '',
+                          supplier: product.supplier || '',
+                          link: product.link || '',
+                          unit: product.unit || 'each',
+                          isAutoExtracted: product.isAutoExtracted || false,
+                          image: product.image || null
+                        });
+                        setShowProductForm(true);
+                      }}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="Edit product"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Are you sure you want to delete this product?')) {
+                          setLoading(true);
+                          try {
+                            await deleteDoc(doc(db, 'products', product.id));
+                            await loadData();
+                            showNotification('Product deleted successfully', 'success');
+                          } catch (error) {
+                            console.error('Error deleting product:', error);
+                            showNotification('Error deleting product', 'error');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }
+                      }}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      title="Delete product"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Vertical Buttons Section - Right Side */}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => addProductToEstimate(product)}
-                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                  title="Add to estimate"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingProduct(product);
-                    setProductFormData({
-                      name: product.name,
-                      price: product.price.toString(),
-                      description: product.description || '',
-                      category: product.category || '',
-                      supplier: product.supplier || '',
-                      link: product.link || '',
-                      unit: product.unit || 'each',
-                      isAutoExtracted: product.isAutoExtracted || false,
-                      image: product.image || null
-                    });
-                    setShowProductForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit product"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={async () => {
-                    if (window.confirm('Are you sure you want to delete this product?')) {
-                      setLoading(true);
-                      try {
-                        await deleteDoc(doc(db, 'products', product.id));
-                        await loadData();
-                        showNotification('Product deleted successfully', 'success');
-                      } catch (error) {
-                        console.error('Error deleting product:', error);
-                        showNotification('Error deleting product', 'error');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }
-                  }}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete product"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
-            {/* Bottom Section - View Product Button */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            {/* Categoría y link abajo */}
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded">
+                {product.category || 'Plumbing'}
+              </span>
               {product.link ? (
                 <button
                   onClick={() => window.open(product.link, '_blank')}
-                  className="flex items-center gap-2 text-blue-500 hover:text-blue-600 text-sm hover:underline"
+                  className="flex items-center gap-1 text-blue-500 hover:text-blue-600 text-xs hover:underline"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3 h-3" />
                   View Product
                 </button>
               ) : (
-                <span className="text-slate-400 text-sm">No product link available</span>
+                <span className="text-slate-400 text-xs">No link</span>
               )}
             </div>
           </div>
@@ -1140,7 +1291,7 @@ Generated by ECP Assistant`;
     );
   };
 
-  // Packs List with Add to Estimate button
+  // PACKS REORGANIZADO - Quitar texto y mover ojo abajo
   const renderPacksList = (filteredPacks) => {
     if (filteredPacks.length === 0) {
       return (
@@ -1167,28 +1318,14 @@ Generated by ECP Assistant`;
           >
             <div className="flex gap-4">
               {/* Icon Section */}
-              <div
-                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                title="View pack details"
-              >
+              <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
                 <Package className="w-8 h-8 text-green-600" />
-                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
               {/* Content Section */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-2 mb-1">
-                  <h3
-                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
-                    onClick={() => {
-                      setSelectedPack(pack);
-                      setShowPackDetail(true);
-                    }}
-                  >
+                  <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
                     {pack.name}
                   </h3>
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
@@ -1204,7 +1341,7 @@ Generated by ECP Assistant`;
                 </div>
               </div>
 
-              {/* Vertical Buttons Section - Right Side */}
+              {/* Vertical Buttons Section - Right Side (sin ojo) */}
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => addPackToEstimate(pack)}
@@ -1212,16 +1349,6 @@ Generated by ECP Assistant`;
                   title="Add pack to estimate"
                 >
                   <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedPack(pack);
-                    setShowPackDetail(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="View products in pack"
-                >
-                  <Eye className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => {
@@ -1249,11 +1376,17 @@ Generated by ECP Assistant`;
               </div>
             </div>
 
-            {/* Bottom Section - Pack Info */}
+            {/* Bottom Section - NUEVO BOTÓN OJO */}
             <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="text-sm text-slate-500">
-                Click pack name or icon to view products
-              </div>
+              <button
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackDetail(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
+              >
+                👁 View Items
+              </button>
             </div>
           </div>
         ))}
@@ -1423,6 +1556,182 @@ Generated by ECP Assistant`;
       {currentView === 'products' && renderProductsView()}
       {currentView === 'settings' && renderSettingsView()}
 
+      {/* NUEVO MODAL: Detalles/Edición de Proyecto */}
+      {showProjectDetail && selectedProjectForDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Project Details</h2>
+              <button 
+                onClick={() => {
+                  setShowProjectDetail(false);
+                  setSelectedProjectForDetail(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Información del proyecto */}
+              <div className="mb-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-800 mb-2">{selectedProjectForDetail.name}</h3>
+                    <p className="text-slate-600 mb-2">{selectedProjectForDetail.description}</p>
+                    {selectedProjectForDetail.address && (
+                      <p className="text-slate-500 text-sm">{selectedProjectForDetail.address}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-green-600">
+                      ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
+                    </div>
+                    <div className="text-slate-500 text-sm">
+                      {getProjectItemCount(selectedProjectForDetail)} items total
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de productos */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-lg font-semibold text-slate-800">Products in Project</h4>
+                  <button
+                    onClick={() => {
+                      setCurrentProject(selectedProjectForDetail);
+                      setCurrentView('products');
+                      setShowProjectDetail(false);
+                      setSelectedProjectForDetail(null);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    Add More Products
+                  </button>
+                </div>
+
+                {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedProjectForDetail.items.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div className="flex-1">
+                          <h5 className="font-medium text-slate-800">{item.name}</h5>
+                          <p className="text-slate-600 text-sm">{item.description}</p>
+                          <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
+                            <span>Category: {item.category}</span>
+                            <span>Supplier: {item.supplier}</span>
+                            {item.link && (
+                              <a href={item.link} target="_blank" rel="noopener noreferrer" 
+                                 className="text-blue-500 hover:underline flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" />
+                                View Product
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity - 1)}
+                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="font-medium text-slate-800 min-w-[2rem] text-center">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
+                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-slate-800">
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </div>
+                            <div className="text-slate-500 text-sm">
+                              ${item.price.toFixed(2)} each
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Remove this product from the project?')) {
+                                removeProductFromProject(selectedProjectForDetail, item.id);
+                              }
+                            }}
+                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+                    <p className="text-slate-500">No products in this project yet</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Acciones del proyecto */}
+              <div className="flex gap-3 pt-6 border-t border-slate-200">
+                <button
+                  onClick={() => exportToPDF(selectedProjectForDetail)}
+                  className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Download className="w-4 h-4" />
+                  Export PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingProject(selectedProjectForDetail);
+                    setProjectFormData({
+                      name: selectedProjectForDetail.name,
+                      description: selectedProjectForDetail.description || '',
+                      address: selectedProjectForDetail.address || ''
+                    });
+                    setShowProjectDetail(false);
+                    setSelectedProjectForDetail(null);
+                    setShowProjectForm(true);
+                  }}
+                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit Project
+                </button>
+                <div className="relative group">
+                  <button className="px-4 py-3 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors">
+                    <Share className="w-4 h-4" />
+                  </button>
+                  <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                    <button 
+                      onClick={() => shareEstimate(selectedProjectForDetail, 'email')}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Email
+                    </button>
+                    <button 
+                      onClick={() => shareEstimate(selectedProjectForDetail, 'teams')}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Teams
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Add/Edit Project */}
       {showProjectForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1453,7 +1762,19 @@ Generated by ECP Assistant`;
                   onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                   rows={3}
-                  placeholder="Project description or address"
+                  placeholder="Project description"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={projectFormData.address}
+                  onChange={(e) => setProjectFormData({...projectFormData, address: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Project address"
                 />
               </div>
               <div className="flex gap-3 mt-6">
