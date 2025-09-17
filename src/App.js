@@ -803,141 +803,425 @@ const App = () => {
         lastModified: new Date().toISOString()
       });
       
-      // Update local states
-      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-      setCurrentProject(current => current?.id === project.id ? updatedProject : current);
-      setSelectedProjectForDetail(updatedProject);
-      
-      showNotification('Quantity updated', 'success');
-    } catch (error) {
-      console.error('Error updating quantity:', error);
-      showNotification('Error updating quantity', 'error');
+      import React, { useState, useEffect } from 'react';
+import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText, Minus, Phone, MapPin, User, Image } from 'lucide-react';
+import { db } from './firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+
+const App = () => {
+  const [currentView, setCurrentView] = useState('projects');
+  const [productView, setProductView] = useState('products');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
+  
+  // Data states
+  const [projects, setProjects] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [packs, setPacks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  
+  // Form states
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showPackForm, setShowPackForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [showProductDetail, setShowProductDetail] = useState(false);
+  const [showPackDetail, setShowPackDetail] = useState(false);
+  const [showProjectDetail, setShowProjectDetail] = useState(false);
+  const [showSupplierDetail, setShowSupplierDetail] = useState(false);
+  const [showProductSelector, setShowProductSelector] = useState(false);
+  
+  const [editingProject, setEditingProject] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingPack, setEditingPack] = useState(null);
+  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState(null);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [currentProject, setCurrentProject] = useState(null);
+  
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [notification, setNotification] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  
+  // Product selector states
+  const [productSelectorSearch, setProductSelectorSearch] = useState('');
+  
+  // Form data
+  const [projectFormData, setProjectFormData] = useState({
+    name: '',
+    description: '',
+    address: ''
+  });
+
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    price: '',
+    description: '',
+    category: '',
+    supplier: '',
+    link: '',
+    unit: 'each',
+    partNumber: '',
+    isAutoExtracted: false,
+    image: null
+  });
+
+  const [packFormData, setPackFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    products: [],
+    image: null
+  });
+
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    description: ''
+  });
+
+  const [supplierFormData, setSupplierFormData] = useState({
+    name: '',
+    contact: '',
+    email: '',
+    phone: '',
+    extension: ''
+  });
+
+  // Initialize and load data
+  useEffect(() => {
+    setConnected(true);
+    loadData();
+    
+    // Online/offline listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
     }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  // Notification system
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
   };
 
-  // IMPROVED PDF EXPORT FUNCTION with correct field structure
-  const exportToPDF = (project) => {
-    if (!project.items || project.items.length === 0) {
-      showNotification('No items in this project to export', 'error');
-      return;
-    }
+  // Enhanced contact functions
+  const handleEmailClick = (email) => {
+    window.location.href = `mailto:${email}`;
+  };
 
-    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Create HTML content with improved PDF structure
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Project Estimate - ${project.name}</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .project-info { margin-bottom: 20px; }
-            .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            .products-table th, .products-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .products-table th { background-color: #f5f5f5; font-weight: bold; }
-            .products-table td { vertical-align: top; }
-            .summary { font-weight: bold; margin-top: 20px; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-            .url-cell { word-break: break-all; max-width: 150px; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>PROJECT ESTIMATE</h1>
-        </div>
+  const handlePhoneClick = (phone, extension = '') => {
+    const phoneNumber = extension ? `${phone},${extension}` : phone;
+    window.location.href = `tel:${phoneNumber}`;
+  };
+
+  // Delete project function
+  const handleProjectDelete = async (project) => {
+    if (window.confirm(`Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`)) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'projects', project.id));
+        await loadData();
+        showNotification('Project deleted successfully', 'success');
         
-        <div class="project-info">
-            <h2>Project: ${project.name}</h2>
-            <p><strong>Description:</strong> ${project.description || 'No description'}</p>
-            <p><strong>Address:</strong> ${project.address || 'No address'}</p>
-            <p><strong>Created:</strong> ${new Date(project.createdAt).toLocaleDateString()}</p>
-            <p><strong>Last Modified:</strong> ${new Date(project.lastModified).toLocaleDateString()}</p>
-        </div>
-
-        <h3>PRODUCTS:</h3>
-        <table class="products-table">
-            <thead>
-                <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 25%;">Name</th>
-                    <th style="width: 30%;">Description</th>
-                    <th style="width: 15%;">Part Number</th>
-                    <th style="width: 15%;" class="url-cell">URL</th>
-                    <th style="width: 10%;">Quantity</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${project.items.map((item, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${item.name}</td>
-                        <td>${item.description || 'No description'}</td>
-                        <td>${item.partNumber || 'N/A'}</td>
-                        <td class="url-cell">${item.link || 'N/A'}</td>
-                        <td>${item.quantity}</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-
-        <div class="summary">
-            <p>Total Items: ${itemCount}</p>
-            <p>Total Cost: $${total.toFixed(2)}</p>
-        </div>
-
-        <div class="footer">
-            <p>Generated by ECP Assistant on ${new Date().toLocaleDateString()}</p>
-        </div>
-    </body>
-    </html>
-    `;
-    
-    // Create blob and download
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
+        // Clear current project if it was the deleted one
+        if (currentProject?.id === project.id) {
+          setCurrentProject(null);
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        showNotification('Error deleting project', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  // Enhanced share estimate function
-  const shareEstimate = (project, method) => {
-    if (!project.items || project.items.length === 0) {
-      showNotification('No items in this project to share', 'error');
+  // Load all data from Firestore
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const projectsSnapshot = await getDocs(collection(db, 'projects'));
+      const projectsData = projectsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProjects(projectsData);
+
+      const productsSnapshot = await getDocs(collection(db, 'products'));
+      const productsData = productsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(productsData);
+
+      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
+      const categoriesData = categoriesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (categoriesData.length === 0) {
+        const defaultCategories = [
+          { name: 'Electrical', description: 'Electrical components and tools' },
+          { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
+          { name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
+          { name: 'General', description: 'General construction materials' }
+        ];
+        for (const category of defaultCategories) {
+          await addDoc(collection(db, 'categories'), {
+            ...category,
+            createdAt: new Date().toISOString()
+          });
+        }
+        const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
+        const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setCategories(newCategoriesData);
+      } else {
+        setCategories(categoriesData);
+      }
+
+      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+      const suppliersData = suppliersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      if (suppliersData.length === 0) {
+        const defaultSuppliers = [
+          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001', extension: '' },
+          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002', extension: '123' },
+          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003', extension: '' },
+          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004', extension: '456' }
+        ];
+        for (const supplier of defaultSuppliers) {
+          await addDoc(collection(db, 'suppliers'), {
+            ...supplier,
+            createdAt: new Date().toISOString()
+          });
+        }
+        const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+        const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setSuppliers(newSuppliersData);
+      } else {
+        setSuppliers(suppliersData);
+      }
+
+      const packsSnapshot = await getDocs(collection(db, 'packs'));
+      const packsData = packsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPacks(packsData);
+
+      showNotification('Data loaded successfully!', 'success');
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setConnected(false);
+      showNotification('Error loading data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Project functions
+  const handleProjectSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!projectFormData.name) {
+      showNotification('Please enter project name', 'error');
       return;
     }
 
-    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
-    
-    const shareText = `Project Estimate: ${project.name}
-
-Items: ${itemCount}
-Total Cost: $${total.toFixed(2)}
-
-Products:
-${project.items.map(item => `• ${item.name} ${item.partNumber ? `(${item.partNumber})` : ''} - $${item.price.toFixed(2)} x${item.quantity}`).join('\n')}
-
-Generated by ECP Assistant`;
-    
-    if (method === 'email') {
-      const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
-      window.location.href = mailtoLink;
-    } else if (method === 'teams') {
-      const teamsUrl = `https://teams.microsoft.com/share?href=${encodeURIComponent(window.location.href)}&msgText=${encodeURIComponent(shareText)}`;
-      window.open(teamsUrl, '_blank');
+    setLoading(true);
+    try {
+      const projectData = {
+        ...projectFormData,
+        items: editingProject ? editingProject.items : [],
+        total: editingProject ? editingProject.total : 0,
+        createdAt: editingProject ? editingProject.createdAt : new Date().toISOString(),
+        lastModified: new Date().toISOString()
+      };
+      
+      if (editingProject) {
+        await updateDoc(doc(db, 'projects', editingProject.id), projectData);
+        showNotification('Project updated successfully!', 'success');
+      } else {
+        const docRef = await addDoc(collection(db, 'projects'), projectData);
+        const newProject = { id: docRef.id, ...projectData };
+        setCurrentProject(newProject);
+        showNotification('Project created successfully!', 'success');
+      }
+      
+      await loadData();
+      setProjectFormData({ name: '', description: '', address: '' });
+      setShowProjectForm(false);
+      setEditingProject(null);
+    } catch (error) {
+      console.error('Error saving project:', error);
+      showNotification('Error saving project', 'error');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Product functions
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
     
-    showNotification(`Shared via ${method}!`, 'success');
+    if (!productFormData.name || !productFormData.price) {
+      showNotification('Please fill in at least the name and price', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const productData = {
+        ...productFormData,
+        price: parseFloat(productFormData.price),
+        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingProduct) {
+        await updateDoc(doc(db, 'products', editingProduct.id), productData);
+        showNotification('Product updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'products'), productData);
+        showNotification('Product added successfully!', 'success');
+      }
+
+      await loadData();
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
+      setShowProductForm(false);
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error saving product:', error);
+      showNotification('Error saving product', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pack functions
+  const handlePackSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!packFormData.name) {
+      showNotification('Please enter pack name', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const packData = {
+        ...packFormData,
+        createdAt: new Date().toISOString()
+      };
+      
+      if (editingPack) {
+        await updateDoc(doc(db, 'packs', editingPack.id), packData);
+        showNotification('Pack updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'packs'), packData);
+        showNotification('Pack created successfully!', 'success');
+      }
+      
+      await loadData();
+      setPackFormData({ name: '', description: '', category: '', products: [], image: null });
+      setShowPackForm(false);
+      setEditingPack(null);
+    } catch (error) {
+      console.error('Error saving pack:', error);
+      showNotification('Error saving pack', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Supplier functions
+  const handleSupplierSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!supplierFormData.name) {
+      showNotification('Please enter supplier name', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const supplierData = {
+        ...supplierFormData,
+        createdAt: editingSupplier ? editingSupplier.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingSupplier) {
+        await updateDoc(doc(db, 'suppliers', editingSupplier.id), supplierData);
+        showNotification('Supplier updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'suppliers'), supplierData);
+        showNotification('Supplier added successfully!', 'success');
+      }
+
+      await loadData();
+      setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
+      setShowSupplierForm(false);
+      setEditingSupplier(null);
+    } catch (error) {
+      console.error('Error saving supplier:', error);
+      showNotification('Error saving supplier', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Product selector functions
+  const filteredProductsForSelector = products.filter(product =>
+    product.name.toLowerCase().includes(productSelectorSearch.toLowerCase()) ||
+    (product.partNumber && product.partNumber.toLowerCase().includes(productSelectorSearch.toLowerCase()))
+  );
+
+  const addProductToPack = (product) => {
+    const isAlreadyAdded = packFormData.products.some(p => p.id === product.id);
+    if (isAlreadyAdded) {
+      showNotification('Product already added to pack', 'info');
+      return;
+    }
+
+    setPackFormData({
+      ...packFormData,
+      products: [...packFormData.products, {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        partNumber: product.partNumber || '',
+        quantity: 1,
+        image: product.image
+      }]
+    });
+    showNotification(`${product.name} added to pack`, 'success');
   };
 
   // Helper functions
@@ -954,975 +1238,7 @@ Generated by ECP Assistant`;
     );
   });
 
-  // Header component
-  const renderHeader = () => (
-    <div className="bg-white shadow-sm border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-              }`}>
-                {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {isOnline ? 'Online' : 'Offline'}
-              </div>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
-                Firebase Connected
-              </div>
-            </div>
-            <p className="text-slate-600">
-              {currentProject ? (
-                <span className="flex items-center gap-2">
-                  Active: <strong>{currentProject.name}</strong>
-                  {currentProject.items && currentProject.items.length > 0 && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
-                      {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
-                    </span>
-                  )}
-                </span>
-              ) : (
-                'Welcome, dainierds41@gmail.com'
-              )}
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={loadData}
-              disabled={loading}
-              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Sync</span>
-            </button>
-            {currentView === 'projects' && (
-              <button 
-                onClick={() => setShowProjectForm(true)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Estimate</span>
-              </button>
-            )}
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Navigation component
-  const renderNavigation = () => (
-    <div className="bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
-          <button
-            onClick={() => setCurrentView('projects')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Projects & Estimates</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('products')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>Product Library</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Settings</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Projects View WITHOUT long press, WITH delete icon
-  const renderProjectsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects & Estimates</h2>
-          <p className="text-slate-600">Manage your construction projects and estimates</p>
-        </div>
-        <button 
-          onClick={() => setShowProjectForm(true)}
-          className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
-      </div>
-
-      {/* Project search */}
-      <div className="mb-8">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={projectSearchTerm}
-            onChange={(e) => setProjectSearchTerm(e.target.value)}
-            placeholder="Search projects..."
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-          />
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredProjects.length > 0 ? (
-          filteredProjects.map(project => {
-            const itemCount = getProjectItemCount(project);
-            const total = getProjectTotal(project);
-            const formattedDate = new Date(project.createdAt).toLocaleDateString();
-            
-            return (
-              <div 
-                key={project.id} 
-                className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
-                    <p className="text-gray-600 text-sm">{project.description}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedProjectForDetail(project);
-                        setShowProjectDetail(true);
-                      }}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title="View project details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingProject(project);
-                        setProjectFormData({
-                          name: project.name,
-                          description: project.description || '',
-                          address: project.address || ''
-                        });
-                        setShowProjectForm(true);
-                      }}
-                      className="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
-                      title="Edit project"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleProjectDelete(project);
-                      }}
-                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                      title="Delete project"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentProject(project);
-                      }}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Set as active project"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        exportToPDF(project);
-                      }}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Export to PDF"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <div className="relative group">
-                      <button 
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
-                      >
-                        <Share className="w-4 h-4" />
-                      </button>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            shareEstimate(project, 'email');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <Mail className="w-4 h-4" />
-                          Email
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            shareEstimate(project, 'teams');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          Teams
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
-                  <span>{itemCount} items</span>
-                  <span>Created {formattedDate}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 mb-2">
-              {projectSearchTerm ? 'No projects found' : 'No projects yet'}
-            </h3>
-            <p className="text-slate-500 mb-4">
-              {projectSearchTerm 
-                ? 'Try adjusting your search criteria'
-                : 'Create your first project to start building estimates'
-              }
-            </p>
-            {!projectSearchTerm && (
-              <button
-                onClick={() => setShowProjectForm(true)}
-                className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-              >
-                Create Project
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // Products View
-  const renderProductsView = () => {
-    const filteredProducts = products.filter(product => {
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (product.partNumber && product.partNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-      return matchesCategory && matchesSearch;
-    });
-
-    const filteredPacks = packs.filter(pack => {
-      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
-      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Sub-navigation */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setProductView('products')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'products'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Products ({products.length})
-            </button>
-            <button
-              onClick={() => setProductView('packs')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'packs'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Packs ({packs.length})
-            </button>
-          </div>
-          
-          {productView === 'products' ? (
-            <button 
-              onClick={() => setShowProductForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Product</span>
-            </button>
-          ) : (
-            <button 
-              onClick={() => setShowPackForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Pack</span>
-            </button>
-          )}
-        </div>
-
-        {/* Header info */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Product Library</h2>
-          <div className="text-slate-600">
-            <p>Connected to Firebase! Your products will sync across devices.</p>
-            <p>You have {products.length} products and {packs.length} packs loaded.</p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${productView} by name or part number...`}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Category filters */}
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-              selectedCategory === 'all'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-            }`}
-          >
-            All Categories ({productView === 'products' ? products.length : packs.length})
-          </button>
-          {categories.map((category) => {
-            const count = productView === 'products' 
-              ? products.filter(p => p.category === category.name).length
-              : packs.filter(p => p.category === category.name).length;
-            return (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.name)}
-                className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-                  selectedCategory === category.name
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {category.name} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        {productView === 'products' ? renderProductsList(filteredProducts) : renderPacksList(filteredPacks)}
-      </div>
-    );
-  };
-
-  // Products list design
-  const renderProductsList = (filteredProducts) => {
-    if (filteredProducts.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
-          <p className="text-slate-500 mb-4">
-            {searchTerm || selectedCategory !== 'all'
-              ? 'Try adjusting your search or filter criteria'
-              : 'Start by adding your first product'}
-          </p>
-          <button
-            onClick={() => setShowProductForm(true)}
-            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
-          >
-            Add Product
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-        {filteredProducts.map((product) => (
-          <div
-            key={product.id}
-            className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 relative"
-          >
-            {/* Product icon - top left corner */}
-            <div className="absolute top-4 left-4">
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
-                {product.image ? (
-                  <img 
-                    src={product.image} 
-                    alt={product.name}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <Package className="w-6 h-6 text-slate-400" />
-                )}
-              </div>
-            </div>
-
-            {/* Badges and buttons - top right corner */}
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-              {product.isAutoExtracted && (
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  Auto
-                </span>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingProduct(product);
-                  setProductFormData({
-                    name: product.name,
-                    price: product.price.toString(),
-                    description: product.description || '',
-                    category: product.category || '',
-                    supplier: product.supplier || '',
-                    link: product.link || '',
-                    unit: product.unit || 'each',
-                    partNumber: product.partNumber || '',
-                    isAutoExtracted: product.isAutoExtracted || false,
-                    image: product.image || null
-                  });
-                  setShowProductForm(true);
-                }}
-                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                title="Edit product"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (window.confirm('Are you sure you want to delete this product?')) {
-                    setLoading(true);
-                    try {
-                      await deleteDoc(doc(db, 'products', product.id));
-                      await loadData();
-                      showNotification('Product deleted successfully', 'success');
-                    } catch (error) {
-                      console.error('Error deleting product:', error);
-                      showNotification('Error deleting product', 'error');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }
-                }}
-                className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                title="Delete product"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Main content - with margin for icon */}
-            <div className="mt-16">
-              {/* Product title */}
-              <h3 
-                className="font-bold text-slate-800 text-lg mb-3 cursor-pointer hover:text-blue-600 transition-colors"
-                onClick={() => {
-                  setSelectedProduct(product);
-                  setShowProductDetail(true);
-                }}
-              >
-                {product.name}
-              </h3>
-
-              {/* Part Number/SKU */}
-              {product.partNumber && (
-                <div className="mb-2">
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                    {product.partNumber}
-                  </span>
-                </div>
-              )}
-
-              {/* Description */}
-              <p className="text-slate-600 text-sm mb-4 leading-relaxed min-h-[2.5rem]">
-                {product.description || 'Home Depot product. Estimated price based on category.'}
-              </p>
-
-              {/* Price and supplier */}
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-blue-600 font-bold text-xl">
-                  ${Number(product.price).toFixed(2)} {product.unit || 'each'}
-                </span>
-                <span className="text-slate-500 font-medium">
-                  {product.supplier || "Lowe's"}
-                </span>
-              </div>
-
-              {/* Category */}
-              <div className="mb-4">
-                <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-sm font-medium">
-                  {product.category || 'Plumbing'}
-                </span>
-              </div>
-
-              {/* Links and bottom buttons */}
-              <div className="flex items-center justify-between">
-                {product.link ? (
-                  <button
-                    onClick={() => window.open(product.link, '_blank')}
-                    className="flex items-center gap-2 text-blue-500 hover:text-blue-600 text-sm font-medium hover:underline"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View Product
-                  </button>
-                ) : (
-                  <span className="text-slate-400 text-sm">No product link</span>
-                )}
-
-                {/* Add to estimate button */}
-                <button
-                  onClick={() => addProductToEstimate(product)}
-                  className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add to Estimate
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // ENHANCED PACKS LIST with image support
-  const renderPacksList = (filteredPacks) => {
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
-          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPacks.map((pack) => (
-          <div
-            key={pack.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex gap-4">
-              {/* Icon Section with custom image support */}
-              <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                {pack.image ? (
-                  <img 
-                    src={pack.image} 
-                    alt={pack.name}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <Package className="w-8 h-8 text-green-600" />
-                )}
-              </div>
-
-              {/* Content Section */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
-                    {pack.name}
-                  </h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {pack.products?.length || 0} products
-                  </span>
-                  {pack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Vertical Buttons Section - Right Side */}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => addPackToEstimate(pack)}
-                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                  title="Add pack to estimate"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingPack(pack);
-                    setPackFormData({
-                      name: pack.name,
-                      description: pack.description || '',
-                      category: pack.category || '',
-                      products: pack.products || [],
-                      image: pack.image || null
-                    });
-                    setShowPackForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit pack"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete pack"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom Section - View Items Button */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-                View Items
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // ENHANCED Settings View with Supplier Contact Features
-  const renderSettingsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="bg-white rounded-2xl p-8 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
-        
-        <div className="space-y-8">
-          {/* Categories */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
-              <button 
-                onClick={() => setShowCategoryForm(true)}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Category
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {categories.map(category => (
-                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
-                  <span>{category.name}</span>
-                  <button 
-                    onClick={async () => {
-                      if (categories.length <= 1) {
-                        showNotification('Must keep at least one category', 'error');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
-                        try {
-                          await deleteDoc(doc(db, 'categories', category.id));
-                          await loadData();
-                          showNotification('Category deleted successfully', 'success');
-                        } catch (error) {
-                          console.error('Error deleting category:', error);
-                          showNotification('Error deleting category', 'error');
-                        }
-                      }
-                    }}
-                    className="hover:bg-blue-200 rounded p-1 transition-colors"
-                    title={`Delete ${category.name}`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ENHANCED Suppliers with Contact Features */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
-              <button 
-                onClick={() => setShowSupplierForm(true)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Supplier
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {suppliers.map(supplier => (
-                <div key={supplier.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 hover:shadow-md transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <h4 
-                      className="font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
-                      onClick={() => {
-                        setSelectedSupplier(supplier);
-                        setShowSupplierDetail(true);
-                      }}
-                    >
-                      {supplier.name}
-                    </h4>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setEditingSupplier(supplier);
-                          setSupplierFormData({
-                            name: supplier.name,
-                            contact: supplier.contact || '',
-                            email: supplier.email || '',
-                            phone: supplier.phone || '',
-                            extension: supplier.extension || ''
-                          });
-                          setShowSupplierForm(true);
-                        }}
-                        className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                        title="Edit supplier"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
-                      <button 
-                        onClick={async () => {
-                          if (suppliers.length <= 1) {
-                            showNotification('Must keep at least one supplier', 'error');
-                            return;
-                          }
-                          if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
-                            try {
-                              await deleteDoc(doc(db, 'suppliers', supplier.id));
-                              await loadData();
-                              showNotification('Supplier deleted successfully', 'success');
-                            } catch (error) {
-                              console.error('Error deleting supplier:', error);
-                              showNotification('Error deleting supplier', 'error');
-                            }
-                          }
-                        }}
-                        className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        title="Delete supplier"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 text-sm">
-                    {supplier.contact && (
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <User className="w-3 h-3" />
-                        <span>{supplier.contact}</span>
-                      </div>
-                    )}
-                    {supplier.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-3 h-3 text-slate-600" />
-                        <button
-                          onClick={() => handleEmailClick(supplier.email)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {supplier.email}
-                        </button>
-                      </div>
-                    )}
-                    {supplier.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3 h-3 text-slate-600" />
-                        <button
-                          onClick={() => handlePhoneClick(supplier.phone, supplier.extension)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {supplier.phone}{supplier.extension ? ` ext. ${supplier.extension}` : ''}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Database Status */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
-            <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
-            <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
-          </div>
-
-          {/* Storage Info */}
-          <div>
-            <h3 className="font-semibold text-slate-800 mb-3">Storage Information</h3>
-            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Products:</span>
-                  <span>{products.length} items</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Packs:</span>
-                  <span>{packs.length} packs</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Projects:</span>
-                  <span>{projects.length} projects</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Auto-extracted:</span>
-                  <span>{products.filter(p => p.isAutoExtracted).length} products</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // PRODUCT SELECTOR MODAL for Pack Creation - FIXED Z-INDEX
-  const renderProductSelector = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-slate-800">Select Products for Pack</h2>
-            <button 
-              onClick={() => {
-                setShowProductSelector(false);
-                setProductSelectorSearch('');
-              }}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6 text-slate-400" />
-            </button>
-          </div>
-          
-          {/* Search */}
-          <div className="relative">
-            <input
-              type="text"
-              value={productSelectorSearch}
-              onChange={(e) => setProductSelectorSearch(e.target.value)}
-              placeholder="Search products by name or part number..."
-              className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {filteredProductsForSelector.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProductsForSelector.map((product) => (
-                <div
-                  key={product.id}
-                  className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => addProductToPack(product)}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      {product.image ? (
-                        <img 
-                          src={product.image} 
-                          alt={product.name}
-                          className="w-full h-full object-cover rounded-lg"
-                        />
-                      ) : (
-                        <Package className="w-6 h-6 text-slate-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
-                      {product.partNumber && (
-                        <p className="text-xs text-slate-500">{product.partNumber}</p>
-                      )}
-                      <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{product.category}</span>
-                    <button className="text-green-600 hover:bg-green-50 p-1 rounded transition-colors">
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500">No products found matching your search</p>
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t border-slate-200 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600">
-              Selected: {packFormData.products.length} products
-            </span>
-            <button
-              onClick={() => {
-                setShowProductSelector(false);
-                setProductSelectorSearch('');
-              }}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // All existing modals and main return statement...
-
+  // Main Return Component
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Notification System */}
@@ -1940,9 +1256,81 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {renderHeader()}
-      {renderNavigation()}
-      
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                  isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                  {isOnline ? 'Online' : 'Offline'}
+                </div>
+              </div>
+              <p className="text-slate-600">Welcome, dainierds41@gmail.com</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button 
+                onClick={loadData}
+                disabled={loading}
+                className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Sync</span>
+              </button>
+              {currentView === 'projects' && (
+                <button 
+                  onClick={() => setShowProjectForm(true)}
+                  className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Estimate</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
+            <button
+              onClick={() => setCurrentView('projects')}
+              className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Projects</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('products')}
+              className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <span>Products</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('settings')}
+              className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Loading Bar */}
       {loading && (
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
           <div className="flex items-center space-x-3 max-w-7xl mx-auto">
@@ -1952,12 +1340,193 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {currentView === 'projects' && renderProjectsView()}
-      {currentView === 'products' && renderProductsView()}
-      {currentView === 'settings' && renderSettingsView()}
+      {/* Content Views */}
+      {currentView === 'projects' && (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects</h2>
+              <p className="text-slate-600">Manage your construction projects</p>
+            </div>
+            <button 
+              onClick={() => setShowProjectForm(true)}
+              className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Project</span>
+            </button>
+          </div>
 
-      {/* FIXED Z-INDEX MODALS */}
-      {showProductSelector && renderProductSelector()}
+          {/* Project search */}
+          <div className="mb-8">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={projectSearchTerm}
+                onChange={(e) => setProjectSearchTerm(e.target.value)}
+                placeholder="Search projects..."
+                className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+              />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredProjects.length > 0 ? (
+              filteredProjects.map(project => {
+                const itemCount = getProjectItemCount(project);
+                const total = getProjectTotal(project);
+                const formattedDate = new Date(project.createdAt).toLocaleDateString();
+                
+                return (
+                  <div 
+                    key={project.id} 
+                    className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
+                        <p className="text-gray-600 text-sm">{project.description}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => {
+                            setSelectedProjectForDetail(project);
+                            setShowProjectDetail(true);
+                          }}
+                          className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          title="View project details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditingProject(project);
+                            setProjectFormData({
+                              name: project.name,
+                              description: project.description || '',
+                              address: project.address || ''
+                            });
+                            setShowProjectForm(true);
+                          }}
+                          className="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
+                          title="Edit project"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleProjectDelete(project)}
+                          className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
+                      <span>{itemCount} items</span>
+                      <span>Created {formattedDate}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="col-span-full text-center py-12">
+                <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
+                <button
+                  onClick={() => setShowProjectForm(true)}
+                  className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+                >
+                  Create Project
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {currentView === 'products' && (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">Products</h2>
+          <button 
+            onClick={() => setShowProductForm(true)}
+            className="mb-6 flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
+          </button>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {products.map((product) => (
+              <div key={product.id} className="bg-white p-4 rounded-lg shadow border">
+                <h3 className="font-semibold">{product.name}</h3>
+                <p className="text-slate-600">${product.price}</p>
+                <p className="text-sm text-slate-500">{product.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {currentView === 'settings' && (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
+          
+          {/* Categories */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
+              <button 
+                onClick={() => setShowCategoryForm(true)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {categories.map(category => (
+                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
+                  <span>{category.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Suppliers */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
+              <button 
+                onClick={() => setShowSupplierForm(true)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Supplier
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {suppliers.map(supplier => (
+                <div key={supplier.id} className="bg-slate-50 p-4 rounded-lg border">
+                  <h4 className="font-semibold">{supplier.name}</h4>
+                  <p className="text-sm">{supplier.contact}</p>
+                  {supplier.email && (
+                    <button
+                      onClick={() => handleEmailClick(supplier.email)}
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      {supplier.email}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Project Form Modal */}
       {showProjectForm && (
@@ -1967,43 +1536,28 @@ Generated by ECP Assistant`;
               {editingProject ? 'Edit Project' : 'Create New Project'}
             </h2>
             <form onSubmit={handleProjectSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Project Name *
-                </label>
-                <input
-                  type="text"
-                  value={projectFormData.name}
-                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Enter project name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={projectFormData.description}
-                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  rows={3}
-                  placeholder="Project description"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={projectFormData.address}
-                  onChange={(e) => setProjectFormData({...projectFormData, address: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Project address"
-                />
-              </div>
+              <input
+                type="text"
+                value={projectFormData.name}
+                onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Project name"
+                required
+              />
+              <textarea
+                value={projectFormData.description}
+                onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                rows={3}
+                placeholder="Project description"
+              />
+              <input
+                type="text"
+                value={projectFormData.address}
+                onChange={(e) => setProjectFormData({...projectFormData, address: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Project address"
+              />
               <div className="flex gap-3 mt-6">
                 <button
                   type="submit"
@@ -2029,7 +1583,395 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Add Category Modal */}
+      {/* Product Form Modal */}
+      {showProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingProduct ? 'Edit Product' : 'Add New Product'}
+            </h2>
+            
+            <form onSubmit={handleProductSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={productFormData.name}
+                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Enter product name"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={productFormData.price}
+                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                  <input
+                    type="text"
+                    value={productFormData.unit}
+                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="each"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={productFormData.description}
+                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  rows={3}
+                  placeholder="Product description"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={productFormData.category}
+                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
+                  <select
+                    value={productFormData.supplier}
+                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProductForm(false);
+                    setEditingProduct(null);
+                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Pack Form Modal */}
+      {showPackForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingPack ? 'Edit Pack' : 'Create New Pack'}
+            </h2>
+            
+            <form onSubmit={handlePackSubmit} className="space-y-6">
+              {/* Pack Image Upload */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Image</label>
+                <div className="flex items-center gap-4">
+                  {packFormData.image && (
+                    <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-200">
+                      <img 
+                        src={packFormData.image} 
+                        alt="Pack preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (e) => {
+                            setPackFormData(prev => ({ ...prev, image: e.target.result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    />
+                  </div>
+                  {packFormData.image && (
+                    <button
+                      type="button"
+                      onClick={() => setPackFormData(prev => ({ ...prev, image: null }))}
+                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
+                  <input
+                    type="text"
+                    value={packFormData.name}
+                    onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="Enter pack name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={packFormData.category}
+                    onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={packFormData.description}
+                  onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Enter pack description"
+                />
+              </div>
+
+              {/* Products in Pack Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-sm font-semibold text-slate-700">Products in Pack</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductSelector(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    <Search className="w-4 h-4" />
+                    Add Products
+                  </button>
+                </div>
+
+                {/* Selected Products Display */}
+                <div className="border border-slate-300 rounded-xl p-4 min-h-[100px]">
+                  {packFormData.products.length > 0 ? (
+                    <div className="space-y-3">
+                      {packFormData.products.map((product, index) => (
+                        <div key={product.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            {product.image ? (
+                              <img 
+                                src={product.image} 
+                                alt={product.name}
+                                className="w-full h-full object-cover rounded-lg"
+                              />
+                            ) : (
+                              <Package className="w-5 h-5 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-slate-800 truncate">{product.name}</span>
+                            <span className="text-slate-500 text-sm ml-2">${product.price}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPackFormData({
+                                ...packFormData,
+                                products: packFormData.products.filter((_, i) => i !== index)
+                              });
+                            }}
+                            className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Package className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+                      <p className="text-slate-500 text-sm">No products selected</p>
+                      <p className="text-slate-400 text-xs">Click "Add Products" to search and add products</p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Selected: {packFormData.products.length} products
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingPack ? 'Update Pack' : 'Create Pack')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPackForm(false);
+                    setEditingPack(null);
+                    setPackFormData({ name: '', description: '', category: '', products: [], image: null });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Product Selector Modal */}
+      {showProductSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-slate-800">Select Products for Pack</h2>
+                <button 
+                  onClick={() => {
+                    setShowProductSelector(false);
+                    setProductSelectorSearch('');
+                  }}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+              
+              {/* Search */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={productSelectorSearch}
+                  onChange={(e) => setProductSelectorSearch(e.target.value)}
+                  placeholder="Search products by name..."
+                  className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {filteredProductsForSelector.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredProductsForSelector.map((product) => (
+                    <div
+                      key={product.id}
+                      className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
+                      onClick={() => addProductToPack(product)}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          {product.image ? (
+                            <img 
+                              src={product.image} 
+                              alt={product.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
+                          <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{product.category}</span>
+                        <button className="text-green-600 hover:bg-green-50 p-1 rounded transition-colors">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+                  <p className="text-slate-500">No products found</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">
+                  Selected: {packFormData.products.length} products
+                </span>
+                <button
+                  onClick={() => {
+                    setShowProductSelector(false);
+                    setProductSelectorSearch('');
+                  }}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Form Modal */}
       {showCategoryForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
@@ -2095,8 +2037,725 @@ Generated by ECP Assistant`;
           </div>
         </div>
       )}
+
+      {/* Supplier Form Modal */}
+      {showSupplierForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
+            </h2>
+            <form onSubmit={handleSupplierSubmit} className="space-y-4">
+              <input
+                type="text"
+                value={supplierFormData.name}
+                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Supplier name *"
+                required
+              />
+              <input
+                type="text"
+                value={supplierFormData.contact}
+                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Contact person"
+              />
+              <input
+                type="email"
+                value={supplierFormData.email}
+                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Email address"
+              />
+              
+              {/* Phone and Extension Fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="tel"
+                  value={supplierFormData.phone}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Phone number"
+                />
+                <input
+                  type="text"
+                  value={supplierFormData.extension}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, extension: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Extension"
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingSupplier ? 'Update Supplier' : 'Add Supplier')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSupplierForm(false);
+                    setEditingSupplier(null);
+                    setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Project Detail Modal */}
+      {showProjectDetail && selectedProjectForDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Project Details</h2>
+              <button 
+                onClick={() => {
+                  setShowProjectDetail(false);
+                  setSelectedProjectForDetail(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">{selectedProjectForDetail.name}</h3>
+                <p className="text-slate-600 mb-2">{selectedProjectForDetail.description}</p>
+                {selectedProjectForDetail.address && (
+                  <p className="text-slate-500 text-sm">{selectedProjectForDetail.address}</p>
+                )}
+                <div className="text-right mt-4">
+                  <div className="text-3xl font-bold text-green-600">
+                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
+                  </div>
+                  <div className="text-slate-500 text-sm">
+                    {getProjectItemCount(selectedProjectForDetail)} items total
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center py-8">
+                <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">Project Created Successfully</h3>
+                <p className="text-slate-500">
+                  Created on {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
+                </p>
+                <p className="text-slate-400 text-sm mt-2">
+                  You can start adding products to build your estimate
+                </p>
+                <button
+                  onClick={() => {
+                    setCurrentView('products');
+                    setShowProjectDetail(false);
+                    setSelectedProjectForDetail(null);
+                  }}
+                  className="mt-4 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                >
+                  Add Products
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Detail Modal */}
+      {showSupplierDetail && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-slate-800">{selectedSupplier.name}</h2>
+                <button 
+                  onClick={() => {
+                    setShowSupplierDetail(false);
+                    setSelectedSupplier(null);
+                  }}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-6">
+                {/* Contact Person */}
+                {selectedSupplier.contact && (
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <User className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Contact Person</p>
+                      <p className="font-semibold text-slate-800">{selectedSupplier.contact}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Email */}
+                {selectedSupplier.email && (
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Mail className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-500">Email Address</p>
+                      <button
+                        onClick={() => handleEmailClick(selectedSupplier.email)}
+                        className="font-semibold text-blue-600 hover:underline"
+                      >
+                        {selectedSupplier.email}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Phone */}
+                {selectedSupplier.phone && (
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <Phone className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-500">Phone Number</p>
+                      <button
+                        onClick={() => handlePhoneClick(selectedSupplier.phone, selectedSupplier.extension)}
+                        className="font-semibold text-blue-600 hover:underline"
+                      >
+                        {selectedSupplier.phone}
+                        {selectedSupplier.extension && ` ext. ${selectedSupplier.extension}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Button */}
+                <div className="pt-6 border-t border-slate-200">
+                  <button
+                    onClick={() => {
+                      setEditingSupplier(selectedSupplier);
+                      setSupplierFormData({
+                        name: selectedSupplier.name,
+                        contact: selectedSupplier.contact || '',
+                        email: selectedSupplier.email || '',
+                        phone: selectedSupplier.phone || '',
+                        extension: selectedSupplier.extension || ''
+                      });
+                      setShowSupplierDetail(false);
+                      setSelectedSupplier(null);
+                      setShowSupplierForm(true);
+                    }}
+                    className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Supplier Information
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pack Detail Modal */}
+      {showPackDetail && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
+              <button 
+                onClick={() => {
+                  setShowPackDetail(false);
+                  setSelectedPack(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-6">
+                <div className="flex items-start gap-4 mb-4">
+                  {/* Pack Image */}
+                  <div className="w-20 h-20 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    {selectedPack.image ? (
+                      <img 
+                        src={selectedPack.image} 
+                        alt={selectedPack.name}
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <Package className="w-10 h-10 text-green-600" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h3>
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Pack</span>
+                    </div>
+                    <p className="text-slate-600 mb-4">{selectedPack.description}</p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                        {selectedPack.products?.length || 0} products
+                      </span>
+                      {selectedPack.category && (
+                        <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg">{selectedPack.category}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-slate-800 mb-4">Products in this Pack</h4>
+                
+                {selectedPack.products && selectedPack.products.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedPack.products.map((product, index) => (
+                      <div key={index} className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
+                        {/* Product Image */}
+                        <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          {product.image ? (
+                            <img 
+                              src={product.image} 
+                              alt={product.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-slate-400" />
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-medium text-slate-800 truncate">{product.name}</h5>
+                          {product.partNumber && (
+                            <p className="text-xs text-slate-500 bg-slate-200 inline-block px-2 py-1 rounded mt-1">
+                              {product.partNumber}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
+                            <span>Price: ${Number(product.price).toFixed(2)}</span>
+                            <span>Quantity: {product.quantity || 1}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <div className="font-bold text-slate-800">
+                            ${(product.price * (product.quantity || 1)).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+                    <p className="text-slate-500">No products in this pack</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-6 border-t border-slate-200">
+                <button
+                  onClick={() => {
+                    setEditingPack(selectedPack);
+                    setPackFormData({
+                      name: selectedPack.name,
+                      description: selectedPack.description || '',
+                      category: selectedPack.category || '',
+                      products: selectedPack.products || [],
+                      image: selectedPack.image || null
+                    });
+                    setShowPackDetail(false);
+                    setSelectedPack(null);
+                    setShowPackForm(true);
+                  }}
+                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit Pack
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
+      {showProductDetail && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
+              <button 
+                onClick={() => {
+                  setShowProductDetail(false);
+                  setSelectedProduct(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center overflow-hidden">
+                    {selectedProduct.image ? (
+                      <img 
+                        src={selectedProduct.image} 
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                        <p className="text-slate-500 text-sm">No product image</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedProduct.link && (
+                    <a
+                      href={selectedProduct.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View at {selectedProduct.supplier}
+                    </a>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-800 mb-4">{selectedProduct.name}</h3>
+
+                    {/* Part Number/SKU Display */}
+                    {selectedProduct.partNumber && (
+                      <div className="mb-4">
+                        <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
+                          Part #: {selectedProduct.partNumber}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
+                      <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Category</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.category || 'No category'}</p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Supplier</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.supplier || 'No supplier'}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl">
+                    <p className="text-slate-600 text-sm font-semibold mb-2">Description</p>
+                    <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => {
+                        setEditingProduct(selectedProduct);
+                        setProductFormData({
+                          name: selectedProduct.name,
+                          price: selectedProduct.price.toString(),
+                          description: selectedProduct.description || '',
+                          category: selectedProduct.category || '',
+                          supplier: selectedProduct.supplier || '',
+                          link: selectedProduct.link || '',
+                          unit: selectedProduct.unit || 'each',
+                          partNumber: selectedProduct.partNumber || '',
+                          isAutoExtracted: selectedProduct.isAutoExtracted || false,
+                          image: selectedProduct.image || null
+                        });
+                        setShowProductDetail(false);
+                        setSelectedProduct(null);
+                        setShowProductForm(true);
+                      }}
+                      className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Edit Product
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Products View with Packs */}
+      {currentView === 'products' && (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* Sub-navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setProductView('products')}
+                className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                  productView === 'products'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Products ({products.length})
+              </button>
+              <button
+                onClick={() => setProductView('packs')}
+                className={`px-4 py-2 rounded-lg font-medium text-sm ${
+                  productView === 'packs'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Packs ({packs.length})
+              </button>
+            </div>
+            
+            {productView === 'products' ? (
+              <button 
+                onClick={() => setShowProductForm(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Product</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => setShowPackForm(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Pack</span>
+              </button>
+            )}
+          </div>
+
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">
+            {productView === 'products' ? 'Products' : 'Packs'}
+          </h2>
+
+          {/* Content based on view */}
+          {productView === 'products' ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {products.map((product) => (
+                <div 
+                  key={product.id} 
+                  className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 relative cursor-pointer"
+                  onClick={() => {
+                    setSelectedProduct(product);
+                    setShowProductDetail(true);
+                  }}
+                >
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingProduct(product);
+                        setProductFormData({
+                          name: product.name,
+                          price: product.price.toString(),
+                          description: product.description || '',
+                          category: product.category || '',
+                          supplier: product.supplier || '',
+                          link: product.link || '',
+                          unit: product.unit || 'each',
+                          partNumber: product.partNumber || '',
+                          isAutoExtracted: product.isAutoExtracted || false,
+                          image: product.image || null
+                        });
+                        setShowProductForm(true);
+                      }}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      title="Edit product"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-4">
+                      {product.image ? (
+                        <img 
+                          src={product.image} 
+                          alt={product.name}
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      ) : (
+                        <Package className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                    
+                    <h3 className="font-bold text-slate-800 text-lg mb-2">{product.name}</h3>
+                    <p className="text-slate-600 text-sm mb-4">{product.description}</p>
+                    
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-blue-600 font-bold text-xl">${Number(product.price).toFixed(2)}</span>
+                      <span className="text-slate-500 font-medium">{product.supplier}</span>
+                    </div>
+                    
+                    <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-sm">
+                      {product.category}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              
+              {products.length === 0 && (
+                <div className="col-span-full text-center py-12">
+                  <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No products yet</h3>
+                  <button
+                    onClick={() => setShowProductForm(true)}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                  >
+                    Add Product
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {packs.map((pack) => (
+                <div
+                  key={pack.id}
+                  className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+                >
+                  <div className="flex gap-4">
+                    {/* Icon Section with custom image support */}
+                    <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      {pack.image ? (
+                        <img 
+                          src={pack.image} 
+                          alt={pack.name}
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      ) : (
+                        <Package className="w-8 h-8 text-green-600" />
+                      )}
+                    </div>
+
+                    {/* Content Section */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2 mb-1">
+                        <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
+                          {pack.name}
+                        </h3>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
+                      </div>
+                      <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
+                      <div className="flex items-center gap-4 text-sm flex-wrap">
+                        <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                          {pack.products?.length || 0} products
+                        </span>
+                        {pack.category && (
+                          <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Vertical Buttons Section - Right Side */}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingPack(pack);
+                          setPackFormData({
+                            name: pack.name,
+                            description: pack.description || '',
+                            category: pack.category || '',
+                            products: pack.products || [],
+                            image: pack.image || null
+                          });
+                          setShowPackForm(true);
+                        }}
+                        className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Edit pack"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to delete this pack?')) {
+                            try {
+                              await deleteDoc(doc(db, 'packs', pack.id));
+                              await loadData();
+                              showNotification('Pack deleted successfully', 'success');
+                            } catch (error) {
+                              showNotification('Error deleting pack', 'error');
+                            }
+                          }
+                        }}
+                        className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                        title="Delete pack"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom Section - View Items Button */}
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <button
+                      onClick={() => {
+                        setSelectedPack(pack);
+                        setShowPackDetail(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Items
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {packs.length === 0 && (
+                <div className="col-span-full text-center py-12">
+                  <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs yet</h3>
+                  <button
+                    onClick={() => setShowPackForm(true)}
+                    className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
+                  >
+                    Create Pack
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
 export default App;
+     
+     
