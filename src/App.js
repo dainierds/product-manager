@@ -1,4 +1,704 @@
-import React, { useState, useEffect } from 'react';
+);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Notification System */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+            notification.type === 'success'
+              ? 'bg-green-500 text-white'
+              : notification.type === 'error'
+              ? 'bg-red-500 text-white'
+              : 'bg-blue-500 text-white'
+          }`}
+        >
+          {notification.message}
+        </div>
+      )}
+
+      {renderHeader()}
+      {renderNavigation()}
+      
+      {loading && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+          <div className="flex items-center space-x-3 max-w-7xl mx-auto">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-blue-700 text-sm">Syncing with Firebase...</span>
+          </div>
+        </div>
+      )}
+
+      {currentView === 'projects' && renderProjectsView()}
+      {currentView === 'products' && renderProductsView()}
+      {currentView === 'settings' && renderSettingsView()}
+
+      {/* Modal Add/Edit Project */}
+      {showProjectForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingProject ? 'Edit Project' : 'Create New Project'}
+            </h2>
+            <form onSubmit={handleProjectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  value={projectFormData.name}
+                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter project name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={projectFormData.description}
+                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Project description or address"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProjectForm(false);
+                    setProjectFormData({ name: '', description: '', address: '' });
+                    setEditingProject(null);
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add/Edit Product */}
+      {showProductForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingProduct ? 'Edit Product' : 'Add New Product'}
+            </h2>
+            
+            {isExtracting && (
+              <div className="mb-4 p-4 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                Extracting product information from URL...
+              </div>
+            )}
+            
+            <form onSubmit={handleProductSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link</label>
+                <input
+                  type="url"
+                  value={productFormData.link}
+                  onChange={(e) => !editingProduct && handleProductUrlChange(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="https://... (Auto-extraction will fill details)"
+                  disabled={isExtracting || !!editingProduct}
+                />
+                {!editingProduct && (
+                  <p className="mt-2 text-xs text-slate-500">Compatible: Home Depot, Lowe's, Amazon, and more</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <input
+                  type="text"
+                  value={productFormData.name}
+                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Enter product name"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={productFormData.category}
+                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
+                  <select
+                    value={productFormData.supplier}
+                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={productFormData.price}
+                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                  <input
+                    type="text"
+                    value={productFormData.unit}
+                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="e.g., per piece, per foot"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={productFormData.description}
+                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  rows={3}
+                  placeholder="Product description"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={isExtracting || loading}
+                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProductForm(false);
+                    setEditingProduct(null);
+                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Product Detail */}
+      {showProductDetail && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
+              <button 
+                onClick={() => {
+                  setShowProductDetail(false);
+                  setSelectedProduct(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center">
+                    <div className="text-center">
+                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">Product image</p>
+                    </div>
+                  </div>
+
+                  {selectedProduct.link && (
+                    <a
+                      href={selectedProduct.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View at {selectedProduct.supplier}
+                    </a>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-start gap-3 mb-4">
+                      <h3 className="text-2xl font-bold text-slate-800 leading-tight">{selectedProduct.name}</h3>
+                      {selectedProduct.isAutoExtracted && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Auto-extracted
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
+                      <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Category</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.category || 'No category'}</p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <p className="text-slate-600 text-sm font-semibold mb-1">Supplier</p>
+                      <p className="text-slate-800 font-medium">{selectedProduct.supplier || 'No supplier'}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl">
+                    <p className="text-slate-600 text-sm font-semibold mb-2">Description</p>
+                    <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-xl">
+                    <p className="text-slate-600 text-sm font-semibold mb-2">Additional Information</p>
+                    <div className="space-y-1 text-sm">
+                      <p><strong>Product ID:</strong> {selectedProduct.id}</p>
+                      {selectedProduct.createdAt && (
+                        <p><strong>Date added:</strong> {new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
+                      )}
+                      {selectedProduct.updatedAt && (
+                        <p><strong>Last updated:</strong> {new Date(selectedProduct.updatedAt).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => {
+                        addProductToEstimate(selectedProduct);
+                        setShowProductDetail(false);
+                        setSelectedProduct(null);
+                      }}
+                      className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      Add to Estimate
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingProduct(selectedProduct);
+                        setProductFormData({
+                          name: selectedProduct.name,
+                          price: selectedProduct.price.toString(),
+                          description: selectedProduct.description || '',
+                          category: selectedProduct.category || '',
+                          supplier: selectedProduct.supplier || '',
+                          link: selectedProduct.link || '',
+                          unit: selectedProduct.unit || 'each',
+                          isAutoExtracted: selectedProduct.isAutoExtracted || false
+                        });
+                        setShowProductDetail(false);
+                        setSelectedProduct(null);
+                        setShowProductForm(true);
+                      }}
+                      className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Edit Product
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add/Edit Pack */}
+      {showPackForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">
+              {editingPack ? 'Edit Pack' : 'Create New Pack'}
+            </h2>
+            
+            <form onSubmit={handlePackSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
+                  <input
+                    type="text"
+                    value={packFormData.name}
+                    onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="Enter pack name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select
+                    value={packFormData.category}
+                    onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea
+                  value={packFormData.description}
+                  onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Enter pack description"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack</label>
+                <div className="border border-slate-300 rounded-xl p-4 max-h-60 overflow-y-auto">
+                  {products.length > 0 ? (
+                    <div className="space-y-2">
+                      {products.map(product => (
+                        <label key={product.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={packFormData.products.some(p => p.id === product.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPackFormData({
+                                  ...packFormData,
+                                  products: [...packFormData.products, { id: product.id, name: product.name, price: product.price }]
+                                });
+                              } else {
+                                setPackFormData({
+                                  ...packFormData,
+                                  products: packFormData.products.filter(p => p.id !== product.id)
+                                });
+                              }
+                            }}
+                            className="rounded text-green-600 focus:ring-green-500"
+                          />
+                          <div className="flex-1">
+                            <span className="font-medium text-slate-800">{product.name}</span>
+                            <span className="text-slate-500 text-sm ml-2">${product.price}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No products available. Add some products first.</p>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Selected: {packFormData.products.length} products
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingPack ? 'Update Pack' : 'Create Pack')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPackForm(false);
+                    setEditingPack(null);
+                    setPackFormData({ name: '', description: '', category: '', products: [] });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pack Detail */}
+      {showPackDetail && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
+              <button 
+                onClick={() => {
+                  setShowPackDetail(false);
+                  setSelectedPack(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-6">
+                <div className="flex items-start gap-3 mb-4">
+                  <h3 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h3>
+                  <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Pack</span>
+                </div>
+                <p className="text-slate-600 mb-4">{selectedPack.description}</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                    {selectedPack.products?.length || 0} products
+                  </span>
+                  {selectedPack.category && (
+                    <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg">{selectedPack.category}</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold text-slate-800 mb-4">Products in this Pack</h4>
+                {selectedPack.products && selectedPack.products.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedPack.products.map((product, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <span className="font-medium text-slate-800">{product.name}</span>
+                        <span className="text-slate-600">${product.price}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-center py-8">No products in this pack</p>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+                <button
+                  onClick={() => {
+                    setEditingPack(selectedPack);
+                    setPackFormData({
+                      name: selectedPack.name,
+                      description: selectedPack.description || '',
+                      category: selectedPack.category || '',
+                      products: selectedPack.products || []
+                    });
+                    setShowPackDetail(false);
+                    setSelectedPack(null);
+                    setShowPackForm(true);
+                  }}
+                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit Pack
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Category */}
+      {showCategoryForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!categoryFormData.name) {
+                showNotification('Category name is required', 'error');
+                return;
+              }
+              setLoading(true);
+              try {
+                await addDoc(collection(db, 'categories'), {
+                  ...categoryFormData,
+                  createdAt: new Date().toISOString()
+                });
+                await loadData();
+                setCategoryFormData({ name: '', description: '' });
+                setShowCategoryForm(false);
+                showNotification('Category added successfully!', 'success');
+              } catch (error) {
+                console.error('Error saving category:', error);
+                showNotification('Error saving category', 'error');
+              } finally {
+                setLoading(false);
+              }
+            }} className="space-y-4">
+              <input
+                type="text"
+                value={categoryFormData.name}
+                onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Category name"
+                required
+              />
+              <input
+                type="text"
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Description (optional)"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Category'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setCategoryFormData({ name: '', description: '' });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Supplier */}
+      {showSupplierForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Supplier</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!supplierFormData.name) {
+                showNotification('Supplier name is required', 'error');
+                return;
+              }
+              setLoading(true);
+              try {
+                await addDoc(collection(db, 'suppliers'), {
+                  ...supplierFormData,
+                  createdAt: new Date().toISOString()
+                });
+                await loadData();
+                setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+                setShowSupplierForm(false);
+                showNotification('Supplier added successfully!', 'success');
+              } catch (error) {
+                console.error('Error saving supplier:', error);
+                showNotification('Error saving supplier', 'error');
+              } finally {
+                setLoading(false);
+              }
+            }} className="space-y-4">
+              <input
+                type="text"
+                value={supplierFormData.name}
+                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Supplier name"
+                required
+              />
+              <input
+                type="text"
+                value={supplierFormData.contact}
+                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Contact person"
+              />
+              <input
+                type="email"
+                value={supplierFormData.email}
+                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Email"
+              />
+              <input
+                type="tel"
+                value={supplierFormData.phone}
+                onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                placeholder="Phone"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Supplier'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSupplierForm(false);
+                    setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;import React, { useState, useEffect } from 'react';
 import { Plus, Package, Trash2, Edit3, Cloud, CloudOff, Settings, Tag, Truck, Home, FileText, User, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -364,11 +1064,18 @@ const App = () => {
         createdAt: new Date().toISOString()
       };
       
-      await addDoc(collection(db, 'packs'), packData);
+      if (editingPack) {
+        await updateDoc(doc(db, 'packs', editingPack.id), packData);
+        showNotification('Pack updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'packs'), packData);
+        showNotification('Pack created successfully!', 'success');
+      }
+      
       await loadData();
       setPackFormData({ name: '', description: '', category: '', products: [] });
       setShowPackForm(false);
-      showNotification('Pack created successfully!', 'success');
+      setEditingPack(null);
     } catch (error) {
       console.error('Error saving pack:', error);
       showNotification('Error saving pack', 'error');
@@ -954,6 +1661,110 @@ Generated by ECP Assistant
     );
   };
 
+  // Packs List with modern rectangular cards
+  const renderPacksList = (filteredPacks) => {
+    if (filteredPacks.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
+          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
+          <button 
+            onClick={() => setShowPackForm(true)}
+            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
+          >
+            Create Pack
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {filteredPacks.map((pack) => (
+          <div
+            key={pack.id}
+            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackDetail(true);
+                }}
+                title="View pack details"
+              >
+                <Package className="w-8 h-8 text-green-600" />
+                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 mb-1">
+                  <h3
+                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
+                    onClick={() => {
+                      setSelectedPack(pack);
+                      setShowPackDetail(true);
+                    }}
+                  >
+                    {pack.name}
+                  </h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
+                </div>
+                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
+                <div className="flex items-center gap-4 text-sm flex-wrap">
+                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                    {pack.products?.length || 0} products
+                  </span>
+                  {pack.category && (
+                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  setSelectedPack(pack);
+                  setShowPackProducts(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                View Products
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setEditingPack(pack);
+                    setPackFormData({
+                      name: pack.name,
+                      description: pack.description || '',
+                      category: pack.category || '',
+                      products: pack.products || []
+                    });
+                    setShowPackForm(true);
+                  }}
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Edit pack"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDeletePack(pack.id)}
+                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  title="Delete pack"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   // Settings View with same structure but modern design
   const renderSettingsView = () => (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -1082,807 +1893,3 @@ Generated by ECP Assistant
       </div>
     </div>
   );
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Notification System */}
-      {notification && (
-        <div
-          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
-            notification.type === 'success'
-              ? 'bg-green-500 text-white'
-              : notification.type === 'error'
-              ? 'bg-red-500 text-white'
-              : 'bg-blue-500 text-white'
-          }`}
-        >
-          {notification.message}
-        </div>
-      )}
-
-      {renderHeader()}
-      {renderNavigation()}
-      
-      {loading && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
-          <div className="flex items-center space-x-3 max-w-7xl mx-auto">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-            <span className="text-blue-700 text-sm">Syncing with Firebase...</span>
-          </div>
-        </div>
-      )}
-
-      {currentView === 'projects' && renderProjectsView()}
-      {currentView === 'products' && renderProductsView()}
-      {currentView === 'settings' && renderSettingsView()}
-
-      {/* Modal Add/Edit Project */}
-      {showProjectForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingProject ? 'Edit Project' : 'Create New Project'}
-            </h2>
-            <form onSubmit={handleProjectSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Project Name *
-                </label>
-                <input
-                  type="text"
-                  value={projectFormData.name}
-                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Enter project name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={projectFormData.description}
-                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  rows={3}
-                  placeholder="Project description or address"
-                />
-              </div>
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProjectForm(false);
-                    setProjectFormData({ name: '', description: '', address: '' });
-                    setEditingProject(null);
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add/Edit Product */}
-      {showProductForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">
-              {editingProduct ? 'Edit Product' : 'Add New Product'}
-            </h2>
-            
-            {isExtracting && (
-              <div className="mb-4 p-4 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2">
-                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                Extracting product information from URL...
-              </div>
-            )}
-            
-            <form onSubmit={handleProductSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link</label>
-                <input
-                  type="url"
-                  value={productFormData.link}
-                  onChange={(e) => !editingProduct && handleProductUrlChange(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="https://... (Auto-extraction will fill details)"
-                  disabled={isExtracting || !!editingProduct}
-                />
-                {!editingProduct && (
-                  <p className="mt-2 text-xs text-slate-500">Compatible: Home Depot, Lowe's, Amazon, and more</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
-                <input
-                  type="text"
-                  value={productFormData.name}
-                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Enter product name"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={productFormData.price}
-                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
-                  <input
-                    type="text"
-                    value={productFormData.unit}
-                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="e.g., per piece, per foot"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
-                <textarea
-                  value={productFormData.description}
-                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  rows={3}
-                  placeholder="Product description"
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={isExtracting || loading}
-                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProductForm(false);
-                    setEditingProduct(null);
-                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Product Detail */}
-      {showProductDetail && selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
-              <button 
-                onClick={() => {
-                  setShowProductDetail(false);
-                  setSelectedProduct(null);
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center">
-                    <div className="text-center">
-                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
-                      <p className="text-slate-500 text-sm">Product image</p>
-                    </div>
-                  </div>
-
-                  {selectedProduct.link && (
-                    <a
-                      href={selectedProduct.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      View at {selectedProduct.supplier}
-                    </a>
-                  )}
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex items-start gap-3 mb-4">
-                      <h3 className="text-2xl font-bold text-slate-800 leading-tight">{selectedProduct.name}</h3>
-                      {selectedProduct.isAutoExtracted && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          Auto-extracted
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-4">
-                      <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
-                      <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-xl">
-                      <p className="text-slate-600 text-sm font-semibold mb-1">Category</p>
-                      <p className="text-slate-800 font-medium">{selectedProduct.category || 'No category'}</p>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl">
-                      <p className="text-slate-600 text-sm font-semibold mb-1">Supplier</p>
-                      <p className="text-slate-800 font-medium">{selectedProduct.supplier || 'No supplier'}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <p className="text-slate-600 text-sm font-semibold mb-2">Description</p>
-                    <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <p className="text-slate-600 text-sm font-semibold mb-2">Additional Information</p>
-                    <div className="space-y-1 text-sm">
-                      <p><strong>Product ID:</strong> {selectedProduct.id}</p>
-                      {selectedProduct.createdAt && (
-                        <p><strong>Date added:</strong> {new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
-                      )}
-                      {selectedProduct.updatedAt && (
-                        <p><strong>Last updated:</strong> {new Date(selectedProduct.updatedAt).toLocaleDateString()}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={() => {
-                        addProductToEstimate(selectedProduct);
-                        setShowProductDetail(false);
-                        setSelectedProduct(null);
-                      }}
-                      className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      Add to Estimate
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingProduct(selectedProduct);
-                        setProductFormData({
-                          name: selectedProduct.name,
-                          price: selectedProduct.price.toString(),
-                          description: selectedProduct.description || '',
-                          category: selectedProduct.category || '',
-                          supplier: selectedProduct.supplier || '',
-                          link: selectedProduct.link || '',
-                          unit: selectedProduct.unit || 'each',
-                          isAutoExtracted: selectedProduct.isAutoExtracted || false
-                        });
-                        setShowProductDetail(false);
-                        setSelectedProduct(null);
-                        setShowProductForm(true);
-                      }}
-                      className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Edit Product
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add/Edit Pack */}
-      {showPackForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">
-              {editingPack ? 'Edit Pack' : 'Create New Pack'}
-            </h2>
-            
-            <form onSubmit={handlePackSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
-                  <input
-                    type="text"
-                    value={packFormData.name}
-                    onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                    placeholder="Enter pack name"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                  <select
-                    value={packFormData.category}
-                    onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
-                <textarea
-                  value={packFormData.description}
-                  onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  rows={3}
-                  placeholder="Enter pack description"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack</label>
-                <div className="border border-slate-300 rounded-xl p-4 max-h-60 overflow-y-auto">
-                  {products.length > 0 ? (
-                    <div className="space-y-2">
-                      {products.map(product => (
-                        <label key={product.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={packFormData.products.some(p => p.id === product.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setPackFormData({
-                                  ...packFormData,
-                                  products: [...packFormData.products, { id: product.id, name: product.name, price: product.price }]
-                                });
-                              } else {
-                                setPackFormData({
-                                  ...packFormData,
-                                  products: packFormData.products.filter(p => p.id !== product.id)
-                                });
-                              }
-                            }}
-                            className="rounded text-green-600 focus:ring-green-500"
-                          />
-                          <div className="flex-1">
-                            <span className="font-medium text-slate-800">{product.name}</span>
-                            <span className="text-slate-500 text-sm ml-2">${product.price}</span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm">No products available. Add some products first.</p>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Selected: {packFormData.products.length} products
-                </p>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingPack ? 'Update Pack' : 'Create Pack')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPackForm(false);
-                    setEditingPack(null);
-                    setPackFormData({ name: '', description: '', category: '', products: [] });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Pack Detail */}
-      {showPackDetail && selectedPack && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
-              <button 
-                onClick={() => {
-                  setShowPackDetail(false);
-                  setSelectedPack(null);
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="mb-6">
-                <div className="flex items-start gap-3 mb-4">
-                  <h3 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h3>
-                  <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 mb-4">{selectedPack.description}</p>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {selectedPack.products?.length || 0} products
-                  </span>
-                  {selectedPack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg">{selectedPack.category}</span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-lg font-semibold text-slate-800 mb-4">Products in this Pack</h4>
-                {selectedPack.products && selectedPack.products.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedPack.products.map((product, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <span className="font-medium text-slate-800">{product.name}</span>
-                        <span className="text-slate-600">${product.price}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-center py-8">No products in this pack</p>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
-                <button
-                  onClick={() => {
-                    setEditingPack(selectedPack);
-                    setPackFormData({
-                      name: selectedPack.name,
-                      description: selectedPack.description || '',
-                      category: selectedPack.category || '',
-                      products: selectedPack.products || []
-                    });
-                    setShowPackDetail(false);
-                    setSelectedPack(null);
-                    setShowPackForm(true);
-                  }}
-                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Pack
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add Category */}
-      {showCategoryForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!categoryFormData.name) {
-                showNotification('Category name is required', 'error');
-                return;
-              }
-              setLoading(true);
-              try {
-                await addDoc(collection(db, 'categories'), {
-                  ...categoryFormData,
-                  createdAt: new Date().toISOString()
-                });
-                await loadData();
-                setCategoryFormData({ name: '', description: '' });
-                setShowCategoryForm(false);
-                showNotification('Category added successfully!', 'success');
-              } catch (error) {
-                console.error('Error saving category:', error);
-                showNotification('Error saving category', 'error');
-              } finally {
-                setLoading(false);
-              }
-            }} className="space-y-4">
-              <input
-                type="text"
-                value={categoryFormData.name}
-                onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Category name"
-                required
-              />
-              <input
-                type="text"
-                value={categoryFormData.description}
-                onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Description (optional)"
-              />
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Adding...' : 'Add Category'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCategoryForm(false);
-                    setCategoryFormData({ name: '', description: '' });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add Supplier */}
-      {showSupplierForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Supplier</h2>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!supplierFormData.name) {
-                showNotification('Supplier name is required', 'error');
-                return;
-              }
-              setLoading(true);
-              try {
-                await addDoc(collection(db, 'suppliers'), {
-                  ...supplierFormData,
-                  createdAt: new Date().toISOString()
-                });
-                await loadData();
-                setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-                setShowSupplierForm(false);
-                showNotification('Supplier added successfully!', 'success');
-              } catch (error) {
-                console.error('Error saving supplier:', error);
-                showNotification('Error saving supplier', 'error');
-              } finally {
-                setLoading(false);
-              }
-            }} className="space-y-4">
-              <input
-                type="text"
-                value={supplierFormData.name}
-                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Supplier name"
-                required
-              />
-              <input
-                type="text"
-                value={supplierFormData.contact}
-                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Contact person"
-              />
-              <input
-                type="email"
-                value={supplierFormData.email}
-                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Email"
-              />
-              <input
-                type="tel"
-                value={supplierFormData.phone}
-                onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Phone"
-              />
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Adding...' : 'Add Supplier'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSupplierForm(false);
-                    setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default App; gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                  <select
-                    value={productFormData.category}
-                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
-                  <select
-                    value={productFormData.supplier}
-                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.name}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2
-    );
-  };
-
-  // Packs List with modern rectangular cards
-  const renderPacksList = (filteredPacks) => {
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
-          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPacks.map((pack) => (
-          <div
-            key={pack.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                title="View pack details"
-              >
-                <Package className="w-8 h-8 text-green-600" />
-                <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3
-                    className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-green-600 transition-colors"
-                    onClick={() => {
-                      setSelectedPack(pack);
-                      setShowPackDetail(true);
-                    }}
-                  >
-                    {pack.name}
-                  </h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {pack.products?.length || 0} products
-                  </span>
-                  {pack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackProducts(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
-              >
-                <Eye className="w-4 h-4" />
-                View Products
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditingPack(pack);
-                    setPackFormData({
-                      name: pack.name,
-                      description: pack.description || '',
-                      category: pack.category || '',
-                      products: pack.products || []
-                    });
-                    setShowPackForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit pack"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete pack"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
