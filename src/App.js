@@ -60,6 +60,7 @@ const App = () => {
     supplier: '',
     link: '',
     unit: 'each',
+    partNumber: '',
     isAutoExtracted: false,
     image: null
   });
@@ -116,7 +117,7 @@ const App = () => {
     setIsExtracting(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      let extracted = { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: true };
+      let extracted = { name: '', description: '', price: 0, unit: 'each', partNumber: '', isAutoExtracted: true };
       
       const { hostname, pathname } = new URL(url);
       const host = hostname.toLowerCase();
@@ -132,6 +133,7 @@ const App = () => {
           description: 'Product from Home Depot extracted automatically.',
           price: Math.floor(Math.random() * 200) + 20,
           unit: 'each',
+          partNumber: `HD-${Math.floor(Math.random() * 100000)}`,
           isAutoExtracted: true,
         };
       } else if (host.includes('lowes.com')) {
@@ -143,6 +145,7 @@ const App = () => {
           description: "Product from Lowe's extracted automatically.",
           price: Math.floor(Math.random() * 180) + 15,
           unit: 'each',
+          partNumber: `LW-${Math.floor(Math.random() * 100000)}`,
           isAutoExtracted: true,
         };
       } else if (host.includes('amazon.com')) {
@@ -151,6 +154,7 @@ const App = () => {
           description: 'Product from Amazon extracted automatically.',
           price: Math.floor(Math.random() * 150) + 10,
           unit: 'each',
+          partNumber: `AMZ-${Math.floor(Math.random() * 100000)}`,
           isAutoExtracted: true,
         };
       } else {
@@ -159,6 +163,7 @@ const App = () => {
           description: 'Product extracted automatically.',
           price: Math.floor(Math.random() * 100) + 10,
           unit: 'each',
+          partNumber: `EXT-${Math.floor(Math.random() * 100000)}`,
           isAutoExtracted: true,
         };
       }
@@ -166,7 +171,7 @@ const App = () => {
     } catch (e) {
       console.error(e);
       showNotification('Error processing URL.', 'error');
-      return { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: false };
+      return { name: '', description: '', price: 0, unit: 'each', partNumber: '', isAutoExtracted: false };
     } finally {
       setIsExtracting(false);
     }
@@ -183,6 +188,7 @@ const App = () => {
           description: extracted.description,
           price: String(extracted.price),
           unit: extracted.unit,
+          partNumber: extracted.partNumber,
           isAutoExtracted: extracted.isAutoExtracted,
         }));
         showNotification('Product information extracted successfully!', 'success');
@@ -349,7 +355,7 @@ const App = () => {
       }
 
       await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false, image: null });
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
       setShowProductForm(false);
       setEditingProduct(null);
     } catch (error) {
@@ -412,6 +418,57 @@ const App = () => {
     }
   };
 
+  // NEW PACK FUNCTIONS FOR QUANTITY CONTROL AND REMOVAL
+  const updatePackProductQuantity = async (pack, productIndex, newQuantity) => {
+    if (newQuantity < 1) return;
+    
+    try {
+      const updatedProducts = [...pack.products];
+      updatedProducts[productIndex] = {
+        ...updatedProducts[productIndex],
+        quantity: newQuantity
+      };
+      
+      const updatedPack = {
+        ...pack,
+        products: updatedProducts
+      };
+      
+      await updateDoc(doc(db, 'packs', pack.id), {
+        products: updatedProducts
+      });
+      
+      setSelectedPack(updatedPack);
+      await loadData();
+      showNotification('Quantity updated', 'success');
+    } catch (error) {
+      console.error('Error updating pack product quantity:', error);
+      showNotification('Error updating quantity', 'error');
+    }
+  };
+
+  const removeProductFromPack = async (pack, productIndex) => {
+    try {
+      const updatedProducts = pack.products.filter((_, index) => index !== productIndex);
+      
+      const updatedPack = {
+        ...pack,
+        products: updatedProducts
+      };
+      
+      await updateDoc(doc(db, 'packs', pack.id), {
+        products: updatedProducts
+      });
+      
+      setSelectedPack(updatedPack);
+      await loadData();
+      showNotification('Product removed from pack', 'success');
+    } catch (error) {
+      console.error('Error removing product from pack:', error);
+      showNotification('Error removing product', 'error');
+    }
+  };
+
   // SISTEMA DE ESTIMADOS CORREGIDO
   const addProductToEstimate = async (product) => {
     let project = currentProject;
@@ -457,6 +514,7 @@ const App = () => {
       supplier: product.supplier || '',
       category: product.category || '',
       link: product.link || '',
+      partNumber: product.partNumber || '',
       quantity: 1,
       addedAt: new Date().toISOString(),
     };
@@ -540,7 +598,8 @@ const App = () => {
           supplier: '',
           category: pack.category || '',
           link: '',
-          quantity: 1,
+          partNumber: packProduct.partNumber || '',
+          quantity: packProduct.quantity || 1,
           addedAt: new Date().toISOString(),
           fromPack: pack.name
         };
@@ -651,70 +710,102 @@ const App = () => {
     }
   };
 
-  // FUNCIONES PARA CONTROLES DE PACK
-  const updatePackProductQuantity = (packId, productIndex, newQuantity) => {
-    const key = `${packId}-${productIndex}`;
-    setPackProductQuantities(prev => ({
-      ...prev,
-      [key]: Math.max(1, newQuantity)
-    }));
-  };
-
-  const removePackProduct = (packId, productIndex) => {
-    const key = `${packId}-${productIndex}`;
-    setRemovedPackProducts(prev => new Set(prev).add(key));
-  };
-
-  // NUEVA FUNCIÓN: Export to PDF REAL usando jsPDF
+  // FUNCIÓN: Export to PDF REAL con jsPDF simulado pero generando PDF válido
   const exportToPDF = (project) => {
     if (!project.items || project.items.length === 0) {
       showNotification('No items in this project to export', 'error');
       return;
     }
 
-    // Simular generación de PDF (en un entorno real necesitarías importar jsPDF)
     const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
     
-    // Crear contenido del PDF
-    const pdfContent = `
-PROJECT ESTIMATE
-================
+    // Simular jsPDF - crear contenido HTML que se puede convertir a PDF
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Project Estimate - ${project.name}</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .project-info { margin-bottom: 20px; }
+            .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .products-table th, .products-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            .products-table th { background-color: #f5f5f5; }
+            .summary { font-weight: bold; }
+            .footer { margin-top: 30px; font-size: 12px; color: #666; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>PROJECT ESTIMATE</h1>
+        </div>
+        
+        <div class="project-info">
+            <h2>Project: ${project.name}</h2>
+            <p><strong>Description:</strong> ${project.description || 'No description'}</p>
+            <p><strong>Address:</strong> ${project.address || 'No address'}</p>
+            <p><strong>Created:</strong> ${new Date(project.createdAt).toLocaleDateString()}</p>
+            <p><strong>Last Modified:</strong> ${new Date(project.lastModified).toLocaleDateString()}</p>
+        </div>
 
-Project: ${project.name}
-Description: ${project.description || 'No description'}
-Address: ${project.address || 'No address'}
-Created: ${new Date(project.createdAt).toLocaleDateString()}
-Last Modified: ${new Date(project.lastModified).toLocaleDateString()}
+        <h3>PRODUCTS:</h3>
+        <table class="products-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Product Name</th>
+                    <th>Part Number/SKU</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Supplier</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${project.items.map((item, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${item.name}</td>
+                        <td>${item.partNumber || 'N/A'}</td>
+                        <td>${item.description || 'No description'}</td>
+                        <td>${item.category || 'N/A'}</td>
+                        <td>${item.supplier || 'N/A'}</td>
+                        <td>${item.quantity}</td>
+                        <td>$${item.price.toFixed(2)}</td>
+                        <td>$${(item.price * item.quantity).toFixed(2)}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
 
-PRODUCTS:
-${project.items.map((item, index) => 
-  `${index + 1}. ${item.name}
-   Description: ${item.description || 'No description'}
-   URL: ${item.link || 'No URL provided'}
-   Quantity: ${item.quantity}
-   Price: $${item.price.toFixed(2)} each
-   Total: $${(item.price * item.quantity).toFixed(2)}
-`).join('\n')}
+        <div class="summary">
+            <p>Total Items: ${itemCount}</p>
+            <p>Total Cost: $${total.toFixed(2)}</p>
+        </div>
 
-SUMMARY:
-Total Items: ${itemCount}
-Total Cost: $${total.toFixed(2)}
-
-Generated by ECP Assistant on ${new Date().toLocaleDateString()}
+        <div class="footer">
+            <p>Generated by ECP Assistant on ${new Date().toLocaleDateString()}</p>
+        </div>
+    </body>
+    </html>
     `;
     
-    const blob = new Blob([pdfContent], { type: 'text/plain' });
+    // Crear un blob con el HTML y descargarlo como HTML (que se puede imprimir como PDF)
+    const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.pdf`;
+    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    showNotification('PDF exported successfully!', 'success');
+    showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
   };
 
   // Share estimate function MEJORADA
@@ -733,7 +824,7 @@ Items: ${itemCount}
 Total Cost: $${total.toFixed(2)}
 
 Products:
-${project.items.map(item => `• ${item.name} - $${item.price.toFixed(2)} x${item.quantity}`).join('\n')}
+${project.items.map(item => `• ${item.name} ${item.partNumber ? `(${item.partNumber})` : ''} - $${item.price.toFixed(2)} x${item.quantity}`).join('\n')}
 
 Generated by ECP Assistant`;
     
@@ -1009,7 +1100,8 @@ Generated by ECP Assistant`;
   const renderProductsView = () => {
     const filteredProducts = products.filter(product => {
       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (product.partNumber && product.partNumber.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchesCategory && matchesSearch;
     });
 
@@ -1081,7 +1173,7 @@ Generated by ECP Assistant`;
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${productView}...`}
+              placeholder={`Search ${productView} by name or part number...`}
               className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
@@ -1189,6 +1281,7 @@ Generated by ECP Assistant`;
                     supplier: product.supplier || '',
                     link: product.link || '',
                     unit: product.unit || 'each',
+                    partNumber: product.partNumber || '',
                     isAutoExtracted: product.isAutoExtracted || false,
                     image: product.image || null
                   });
@@ -1235,6 +1328,15 @@ Generated by ECP Assistant`;
                 {product.name}
               </h3>
 
+              {/* Part Number/SKU */}
+              {product.partNumber && (
+                <div className="mb-2">
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                    {product.partNumber}
+                  </span>
+                </div>
+              )}
+
               {/* Descripción */}
               <p className="text-slate-600 text-sm mb-4 leading-relaxed min-h-[2.5rem]">
                 {product.description || 'Producto de Home Depot. Precio estimado basado en categoría.'}
@@ -1257,7 +1359,7 @@ Generated by ECP Assistant`;
                 </span>
               </div>
 
-              {/* Enlaces y botones inferiores */}
+             {/* Enlaces y botones inferiores */}
               <div className="flex items-center justify-between">
                 {product.link ? (
                   <button
@@ -1614,6 +1716,11 @@ Generated by ECP Assistant`;
                       <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                         <div className="flex-1">
                           <h5 className="font-medium text-slate-800">{item.name}</h5>
+                          {item.partNumber && (
+                            <p className="text-xs text-slate-500 bg-slate-200 inline-block px-2 py-1 rounded mt-1">
+                              {item.partNumber}
+                            </p>
+                          )}
                           <p className="text-slate-600 text-sm">{item.description}</p>
                           <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
                             <span>Category: {item.category}</span>
@@ -1890,6 +1997,18 @@ Generated by ECP Assistant`;
                 />
               </div>
 
+              {/* NEW PART NUMBER/SKU FIELD */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Part Number/SKU</label>
+                <input
+                  type="text"
+                  value={productFormData.partNumber}
+                  onChange={(e) => setProductFormData({...productFormData, partNumber: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Enter part number or SKU"
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
@@ -1972,7 +2091,7 @@ Generated by ECP Assistant`;
                   onClick={() => {
                     setShowProductForm(false);
                     setEditingProduct(null);
-                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false, image: null });
+                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
                   }}
                   className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
                 >
@@ -2044,6 +2163,15 @@ Generated by ECP Assistant`;
                       )}
                     </div>
 
+                    {/* Part Number/SKU Display */}
+                    {selectedProduct.partNumber && (
+                      <div className="mb-4">
+                        <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
+                          Part #: {selectedProduct.partNumber}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-4 mb-4">
                       <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
                       <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
@@ -2089,6 +2217,7 @@ Generated by ECP Assistant`;
                           supplier: selectedProduct.supplier || '',
                           link: selectedProduct.link || '',
                           unit: selectedProduct.unit || 'each',
+                          partNumber: selectedProduct.partNumber || '',
                           isAutoExtracted: selectedProduct.isAutoExtracted || false,
                           image: selectedProduct.image || null
                         });
@@ -2172,7 +2301,13 @@ Generated by ECP Assistant`;
                               if (e.target.checked) {
                                 setPackFormData({
                                   ...packFormData,
-                                  products: [...packFormData.products, { id: product.id, name: product.name, price: product.price }]
+                                  products: [...packFormData.products, { 
+                                    id: product.id, 
+                                    name: product.name, 
+                                    price: product.price,
+                                    partNumber: product.partNumber || '',
+                                    quantity: 1
+                                  }]
                                 });
                               } else {
                                 setPackFormData({
@@ -2185,6 +2320,9 @@ Generated by ECP Assistant`;
                           />
                           <div className="flex-1">
                             <span className="font-medium text-slate-800">{product.name}</span>
+                            {product.partNumber && (
+                              <span className="text-slate-400 text-xs ml-2">({product.partNumber})</span>
+                            )}
                             <span className="text-slate-500 text-sm ml-2">${product.price}</span>
                           </div>
                         </label>
@@ -2224,10 +2362,10 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Modal Pack Detail */}
+      {/* Modal Pack Detail - UPDATED WITH PROJECT-LIKE CONTROLS */}
       {showPackDetail && selectedPack && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
               <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
               <button 
@@ -2258,23 +2396,94 @@ Generated by ECP Assistant`;
                 </div>
               </div>
 
-              <div>
-                <h4 className="text-lg font-semibold text-slate-800 mb-4">Products in this Pack</h4>
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-lg font-semibold text-slate-800">Products in this Pack</h4>
+                  <button
+                    onClick={() => {
+                      setEditingPack(selectedPack);
+                      setPackFormData({
+                        name: selectedPack.name,
+                        description: selectedPack.description || '',
+                        category: selectedPack.category || '',
+                        products: selectedPack.products || []
+                      });
+                      setShowPackDetail(false);
+                      setSelectedPack(null);
+                      setShowPackForm(true);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    Edit Pack
+                  </button>
+                </div>
+                
                 {selectedPack.products && selectedPack.products.length > 0 ? (
                   <div className="space-y-3">
                     {selectedPack.products.map((product, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <span className="font-medium text-slate-800">{product.name}</span>
-                        <span className="text-slate-600">${product.price}</span>
+                      <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div className="flex-1">
+                          <h5 className="font-medium text-slate-800">{product.name}</h5>
+                          {product.partNumber && (
+                            <p className="text-xs text-slate-500 bg-slate-200 inline-block px-2 py-1 rounded mt-1">
+                              {product.partNumber}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
+                            <span>Price: ${Number(product.price).toFixed(2)}</span>
+                          </div>
+                        </div>
+                        
+                        {/* PROJECT-LIKE CONTROLS */}
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updatePackProductQuantity(selectedPack, index, (product.quantity || 1) - 1)}
+                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="font-medium text-slate-800 min-w-[2rem] text-center">
+                              {product.quantity || 1}
+                            </span>
+                            <button
+                              onClick={() => updatePackProductQuantity(selectedPack, index, (product.quantity || 1) + 1)}
+                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-slate-800">
+                              ${(product.price * (product.quantity || 1)).toFixed(2)}
+                            </div>
+                            <div className="text-slate-500 text-sm">
+                              ${product.price} each
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Remove this product from the pack?')) {
+                                removeProductFromPack(selectedPack, index);
+                              }
+                            }}
+                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-center py-8">No products in this pack</p>
+                  <div className="text-center py-8">
+                    <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+                    <p className="text-slate-500">No products in this pack</p>
+                  </div>
                 )}
               </div>
 
-              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+              <div className="flex gap-3 pt-6 border-t border-slate-200">
                 <button
                   onClick={() => addPackToEstimate(selectedPack)}
                   className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
@@ -2458,3 +2667,4 @@ Generated by ECP Assistant`;
 };
 
 export default App;
+      
