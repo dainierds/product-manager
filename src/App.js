@@ -53,7 +53,8 @@ const App = () => {
     supplier: '',
     link: '',
     unit: 'each',
-    isAutoExtracted: false
+    isAutoExtracted: false,
+    image: null
   });
 
   const [packFormData, setPackFormData] = useState({
@@ -288,13 +289,17 @@ const App = () => {
         ...projectFormData,
         items: [],
         total: 0,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
       };
       
-      await addDoc(collection(db, 'projects'), projectData);
+      const docRef = await addDoc(collection(db, 'projects'), projectData);
+      const newProject = { id: docRef.id, ...projectData };
+      
       await loadData();
       setProjectFormData({ name: '', description: '', address: '' });
       setShowProjectForm(false);
+      setCurrentProject(newProject);
       showNotification('Project created successfully!', 'success');
     } catch (error) {
       console.error('Error saving project:', error);
@@ -331,7 +336,7 @@ const App = () => {
       }
 
       await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
+      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false, image: null });
       setShowProductForm(false);
       setEditingProduct(null);
     } catch (error) {
@@ -394,57 +399,191 @@ const App = () => {
     }
   };
 
-  // Add product to estimate
-  const addProductToEstimate = (product) => {
+  // SISTEMA DE ESTIMADOS CORREGIDO
+  const addProductToEstimate = async (product) => {
     let project = currentProject;
+    
+    // Si no hay proyecto activo, crear uno nuevo
     if (!project) {
-      project = {
-        id: Date.now(),
+      const newProjectData = {
         name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
         description: 'Automatically created estimate',
         items: [],
+        total: 0,
         createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
+        lastModified: new Date().toISOString()
       };
-      setProjects(prev => [project, ...prev]);
-      setCurrentProject(project);
+      
+      try {
+        const docRef = await addDoc(collection(db, 'projects'), newProjectData);
+        project = { id: docRef.id, ...newProjectData };
+        setProjects(prev => [project, ...prev]);
+        setCurrentProject(project);
+      } catch (error) {
+        console.error('Error creating project:', error);
+        showNotification('Error creating project', 'error');
+        return;
+      }
     }
     
+    // Verificar si el producto ya existe en el estimado
     const exists = project.items?.find(i => i.productId === product.id);
     if (exists) {
       showNotification(`${product.name} is already in the estimate`, 'info');
       return;
     }
     
+    // Crear nuevo item
     const item = {
       id: Date.now() + Math.random(),
       productId: product.id,
       name: product.name,
       price: Number(product.price) || 0,
       unit: product.unit || 'each',
-      description: product.description,
-      supplier: product.supplier,
-      category: product.category,
-      link: product.link,
+      description: product.description || '',
+      supplier: product.supplier || '',
+      category: product.category || '',
+      link: product.link || '',
       quantity: 1,
       addedAt: new Date().toISOString(),
     };
     
+    // Actualizar proyecto
+    const updatedItems = [...(project.items || []), item];
+    const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    
     const updatedProject = {
       ...project,
-      items: [...(project.items || []), item],
+      items: updatedItems,
+      total: updatedTotal,
       lastModified: new Date().toISOString()
     };
     
-    setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-    setCurrentProject(updatedProject);
-    showNotification(`Added ${product.name} to estimate`, 'success');
+    try {
+      // Actualizar en Firebase
+      await updateDoc(doc(db, 'projects', project.id), {
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      });
+      
+      // Actualizar estados locales
+      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+      setCurrentProject(updatedProject);
+      showNotification(`Added ${product.name} to estimate`, 'success');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      showNotification('Error adding product to estimate', 'error');
+    }
   };
 
-  // Export to PDF function
+  // NUEVA FUNCIÓN: Añadir pack al estimado (añade todos los productos del pack)
+  const addPackToEstimate = async (pack) => {
+    if (!pack.products || pack.products.length === 0) {
+      showNotification('This pack has no products', 'error');
+      return;
+    }
+
+    let project = currentProject;
+    
+    // Si no hay proyecto activo, crear uno nuevo
+    if (!project) {
+      const newProjectData = {
+        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
+        description: 'Automatically created estimate',
+        items: [],
+        total: 0,
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString()
+      };
+      
+      try {
+        const docRef = await addDoc(collection(db, 'projects'), newProjectData);
+        project = { id: docRef.id, ...newProjectData };
+        setProjects(prev => [project, ...prev]);
+        setCurrentProject(project);
+      } catch (error) {
+        console.error('Error creating project:', error);
+        showNotification('Error creating project', 'error');
+        return;
+      }
+    }
+
+    // Añadir todos los productos del pack
+    const newItems = [];
+    let addedCount = 0;
+    
+    for (const packProduct of pack.products) {
+      // Verificar si el producto ya existe
+      const exists = project.items?.find(i => i.productId === packProduct.id);
+      if (!exists) {
+        const item = {
+          id: Date.now() + Math.random() + addedCount,
+          productId: packProduct.id,
+          name: packProduct.name,
+          price: Number(packProduct.price) || 0,
+          unit: 'each',
+          description: `From pack: ${pack.name}`,
+          supplier: '',
+          category: pack.category || '',
+          link: '',
+          quantity: 1,
+          addedAt: new Date().toISOString(),
+          fromPack: pack.name
+        };
+        newItems.push(item);
+        addedCount++;
+      }
+    }
+
+    if (newItems.length === 0) {
+      showNotification('All products from this pack are already in the estimate', 'info');
+      return;
+    }
+
+    // Actualizar proyecto
+    const updatedItems = [...(project.items || []), ...newItems];
+    const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    
+    const updatedProject = {
+      ...project,
+      items: updatedItems,
+      total: updatedTotal,
+      lastModified: new Date().toISOString()
+    };
+    
+    try {
+      // Actualizar en Firebase
+      await updateDoc(doc(db, 'projects', project.id), {
+        items: updatedItems,
+        total: updatedTotal,
+        lastModified: new Date().toISOString()
+      });
+      
+      // Actualizar estados locales
+      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+      setCurrentProject(updatedProject);
+      showNotification(`Added ${addedCount} products from pack "${pack.name}" to estimate`, 'success');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      showNotification('Error adding pack to estimate', 'error');
+    }
+  };
+
+  // Export to PDF function MEJORADA
   const exportToPDF = (project) => {
-    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    if (!project.items || project.items.length === 0) {
+      showNotification('No items in this project to export', 'error');
+      return;
+    }
+
+    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // Formato mejorado con filas separadas
+    const productNames = project.items.map(item => item.name).join(' | ');
+    const productDescriptions = project.items.map(item => item.description || 'No description').join(' | ');
+    const productUrls = project.items.map(item => item.link || 'No URL').join(' | ');
     
     const pdfContent = `
 PROJECT ESTIMATE
@@ -453,22 +592,42 @@ PROJECT ESTIMATE
 Project: ${project.name}
 Description: ${project.description || 'No description'}
 Created: ${new Date(project.createdAt).toLocaleDateString()}
+Last Modified: ${new Date(project.lastModified).toLocaleDateString()}
 
-ITEMS (${itemCount} total):
-${(project.items || []).map(item => 
-  `• ${item.name} - Qty: ${item.quantity} - $${item.price.toFixed(2)} each - Total: $${(item.price * item.quantity).toFixed(2)}`
-).join('\n')}
+PRODUCT NAMES:
+${productNames}
 
-TOTAL: $${total.toFixed(2)}
+PRODUCT DESCRIPTIONS:
+${productDescriptions}
 
-Generated by ECP Assistant
+PRODUCT URLS:
+${productUrls}
+
+DETAILED ITEMS (${itemCount} total):
+${project.items.map((item, index) => 
+  `${index + 1}. ${item.name}
+   - Price: $${item.price.toFixed(2)} ${item.unit || 'each'}
+   - Quantity: ${item.quantity}
+   - Total: $${(item.price * item.quantity).toFixed(2)}
+   - Category: ${item.category || 'No category'}
+   - Supplier: ${item.supplier || 'No supplier'}
+   - Description: ${item.description || 'No description'}
+   - URL: ${item.link || 'No URL'}
+   ${item.fromPack ? `- From Pack: ${item.fromPack}` : ''}
+`).join('\n')}
+
+SUMMARY:
+Total Items: ${itemCount}
+Total Cost: $${total.toFixed(2)}
+
+Generated by ECP Assistant on ${new Date().toLocaleDateString()}
     `;
     
     const blob = new Blob([pdfContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.name}_estimate.txt`;
+    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -477,12 +636,25 @@ Generated by ECP Assistant
     showNotification('Estimate exported successfully!', 'success');
   };
 
-  // Share estimate function
+  // Share estimate function MEJORADA
   const shareEstimate = (project, method) => {
-    const total = (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
+    if (!project.items || project.items.length === 0) {
+      showNotification('No items in this project to share', 'error');
+      return;
+    }
+
+    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
     
-    const shareText = `Project: ${project.name}\nItems: ${itemCount}\nTotal: $${total.toFixed(2)}\n\nGenerated by ECP Assistant`;
+    const shareText = `Project Estimate: ${project.name}
+
+Items: ${itemCount}
+Total Cost: $${total.toFixed(2)}
+
+Products:
+${project.items.map(item => `• ${item.name} - $${item.price.toFixed(2)} x${item.quantity}`).join('\n')}
+
+Generated by ECP Assistant`;
     
     if (method === 'email') {
       const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
@@ -496,7 +668,7 @@ Generated by ECP Assistant
   };
 
   // Helper functions
-  const getProjectTotal = (project) => (project.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const getProjectTotal = (project) => project.total || 0;
   const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
 
   // Header component
@@ -814,7 +986,7 @@ Generated by ECP Assistant
     );
   };
 
-  // Products List with modern rectangular cards
+  // Products List with reorganized buttons
   const renderProductsList = (filteredProducts) => {
     if (filteredProducts.length === 0) {
       return (
@@ -843,7 +1015,8 @@ Generated by ECP Assistant
             key={product.id}
             className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex gap-4">
+              {/* Image/Icon Section */}
               <div
                 className="relative w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-slate-200 transition-colors group"
                 onClick={() => {
@@ -852,9 +1025,19 @@ Generated by ECP Assistant
                 }}
                 title="View product details"
               >
-                <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
+                {product.image ? (
+                  <img 
+                    src={product.image} 
+                    alt={product.name}
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                ) : (
+                  <Package className="w-8 h-8 text-slate-400 group-hover:text-slate-600" />
+                )}
                 <ZoomIn className="w-4 h-4 text-slate-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
+
+              {/* Content Section */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-2 mb-1">
                   <h3
@@ -881,28 +1064,17 @@ Generated by ECP Assistant
                   <span className="text-slate-500">{product.supplier}</span>
                   <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
                 </div>
-                {product.link && (
-                  <a
-                    href={product.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-600 text-xs inline-flex items-center gap-1 hover:underline"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    View Product
-                  </a>
-                )}
               </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => addProductToEstimate(product)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
-              >
-                <PlusCircle className="w-4 h-4" />
-                Add to Estimate
-              </button>
-              <div className="flex gap-2">
+
+              {/* Vertical Buttons Section - Right Side */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => addProductToEstimate(product)}
+                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                  title="Add to estimate"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => {
                     setEditingProduct(product);
@@ -914,7 +1086,8 @@ Generated by ECP Assistant
                       supplier: product.supplier || '',
                       link: product.link || '',
                       unit: product.unit || 'each',
-                      isAutoExtracted: product.isAutoExtracted || false
+                      isAutoExtracted: product.isAutoExtracted || false,
+                      image: product.image || null
                     });
                     setShowProductForm(true);
                   }}
@@ -946,13 +1119,28 @@ Generated by ECP Assistant
                 </button>
               </div>
             </div>
+
+            {/* Bottom Section - View Product Button */}
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              {product.link ? (
+                <button
+                  onClick={() => window.open(product.link, '_blank')}
+                  className="flex items-center gap-2 text-blue-500 hover:text-blue-600 text-sm hover:underline"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Product
+                </button>
+              ) : (
+                <span className="text-slate-400 text-sm">No product link available</span>
+              )}
+            </div>
           </div>
         ))}
       </div>
     );
   };
 
-  // Packs List with modern rectangular cards
+  // Packs List with Add to Estimate button
   const renderPacksList = (filteredPacks) => {
     if (filteredPacks.length === 0) {
       return (
@@ -977,7 +1165,8 @@ Generated by ECP Assistant
             key={pack.id}
             className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex gap-4">
+              {/* Icon Section */}
               <div
                 className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-green-200 transition-colors group"
                 onClick={() => {
@@ -989,6 +1178,8 @@ Generated by ECP Assistant
                 <Package className="w-8 h-8 text-green-600" />
                 <ZoomIn className="w-4 h-4 text-green-300 absolute right-1 bottom-1 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
+
+              {/* Content Section */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-2 mb-1">
                   <h3
@@ -1012,19 +1203,26 @@ Generated by ECP Assistant
                   )}
                 </div>
               </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
-              >
-                <Eye className="w-4 h-4" />
-                View Products
-              </button>
-              <div className="flex gap-2">
+
+              {/* Vertical Buttons Section - Right Side */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => addPackToEstimate(pack)}
+                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                  title="Add pack to estimate"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedPack(pack);
+                    setShowPackDetail(true);
+                  }}
+                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="View products in pack"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => {
                     setEditingPack(pack);
@@ -1048,6 +1246,13 @@ Generated by ECP Assistant
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
+            </div>
+
+            {/* Bottom Section - Pack Info */}
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="text-sm text-slate-500">
+                Click pack name or icon to view products
               </div>
             </div>
           </div>
@@ -1185,7 +1390,7 @@ Generated by ECP Assistant
     </div>
   );
 
- return (
+  return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Notification System */}
       {notification && (
@@ -1276,7 +1481,7 @@ Generated by ECP Assistant
         </div>
       )}
 
-      {/* Modal Add/Edit Product */}
+      {/* Modal Add/Edit Product with Image Upload */}
       {showProductForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1305,6 +1510,48 @@ Generated by ECP Assistant
                 {!editingProduct && (
                   <p className="mt-2 text-xs text-slate-500">Compatible: Home Depot, Lowe's, Amazon, and more</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Image</label>
+                <div className="flex items-center gap-4">
+                  {productFormData.image && (
+                    <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-200">
+                      <img 
+                        src={productFormData.image} 
+                        alt="Product preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (e) => {
+                            setProductFormData(prev => ({ ...prev, image: e.target.result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Upload an image to replace the default icon</p>
+                  </div>
+                  {productFormData.image && (
+                    <button
+                      type="button"
+                      onClick={() => setProductFormData(prev => ({ ...prev, image: null }))}
+                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1401,7 +1648,7 @@ Generated by ECP Assistant
                   onClick={() => {
                     setShowProductForm(false);
                     setEditingProduct(null);
-                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false });
+                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', isAutoExtracted: false, image: null });
                   }}
                   className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
                 >
@@ -1433,11 +1680,19 @@ Generated by ECP Assistant
             <div className="p-6">
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="space-y-4">
-                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center">
-                    <div className="text-center">
-                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
-                      <p className="text-slate-500 text-sm">Product image</p>
-                    </div>
+                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center overflow-hidden">
+                    {selectedProduct.image ? (
+                      <img 
+                        src={selectedProduct.image} 
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                        <p className="text-slate-500 text-sm">No product image</p>
+                      </div>
+                    )}
                   </div>
 
                   {selectedProduct.link && (
@@ -1510,7 +1765,8 @@ Generated by ECP Assistant
                           supplier: selectedProduct.supplier || '',
                           link: selectedProduct.link || '',
                           unit: selectedProduct.unit || 'each',
-                          isAutoExtracted: selectedProduct.isAutoExtracted || false
+                          isAutoExtracted: selectedProduct.isAutoExtracted || false,
+                          image: selectedProduct.image || null
                         });
                         setShowProductDetail(false);
                         setSelectedProduct(null);
@@ -1696,6 +1952,13 @@ Generated by ECP Assistant
 
               <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
                 <button
+                  onClick={() => addPackToEstimate(selectedPack)}
+                  className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Pack to Estimate
+                </button>
+                <button
                   onClick={() => {
                     setEditingPack(selectedPack);
                     setPackFormData({
@@ -1786,7 +2049,7 @@ Generated by ECP Assistant
         </div>
       )}
 
-{/* Modal Add Supplier */}
+      {/* Modal Add Supplier */}
       {showSupplierForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
