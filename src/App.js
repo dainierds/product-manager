@@ -767,6 +767,7 @@ const App = () => {
             <td>${index + 1}</td>
             <td>${item.name}</td>
             <td>${item.partNumber || 'N/A'}</td>
+            <td>${item.link || 'N/A'}</td>
             <td>${item.quantity}</td>
             <td>${item.supplier || 'N/A'}</td>
              </tr>
