@@ -222,36 +222,39 @@ const App = () => {
       setIsExtracting(false);
     }
   };
-
   // Image handling functions
-  const handleImageUpload = async (file, type = 'product', id = null) => {
-    if (!file) return null;
+const handleImageUpload = async (file, type = 'product', id = null) => {
+  if (!file) return null;
+  
+  setIsUploadingImage(true);
+  setImageUploadProgress(0);
+  
+  try {
+    // Create unique filename
+    const timestamp = Date.now();
+    const filename = `${type}s/${id || timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const storageRef = ref(storage, filename);
     
-    setIsUploadingImage(true);
+    console.log('Uploading to:', filename); // Debug
+    
+    // Upload file
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    console.log('Upload successful:', downloadURL); // Debug
+    
+    setImageUploadProgress(100);
+    showNotification('Image uploaded successfully!', 'success');
+    return downloadURL;
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    showNotification(`Error uploading image: ${error.message}`, 'error');
+    return null;
+  } finally {
+    setIsUploadingImage(false);
     setImageUploadProgress(0);
-    
-    try {
-      // Create unique filename
-      const timestamp = Date.now();
-      const filename = `${type}s/${id || timestamp}_${file.name}`;
-      const storageRef = ref(storage, filename);
-      
-      // Upload file
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      
-      setImageUploadProgress(100);
-      showNotification('Image uploaded successfully!', 'success');
-      return downloadURL;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      showNotification('Error uploading image', 'error');
-      return null;
-    } finally {
-      setIsUploadingImage(false);
-      setImageUploadProgress(0);
-    }
-  };
+  }
+};
 
   const deleteImageFromStorage = async (imageUrl) => {
     if (!imageUrl || !imageUrl.includes('firebase')) return;
