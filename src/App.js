@@ -2473,7 +2473,501 @@ return (
         </div>
       )}
 
-      {/* Other Modals would continue here... */}
+      {/* Product Detail Modal */}
+      {showProductDetail && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      {selectedProduct.image ? (
+                        <img 
+                          src={selectedProduct.image} 
+                          alt={selectedProduct.name}
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      ) : (
+                        <Package className="w-8 h-8 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl font-bold text-slate-800 mb-1">{selectedProduct.name}</h2>
+                      {selectedProduct.partNumber && (
+                        <p className="text-sm text-slate-500 mb-2">Part: {selectedProduct.partNumber}</p>
+                      )}
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-3xl font-bold text-blue-600">
+                          ${Number(selectedProduct.price).toFixed(2)}
+                        </span>
+                        <span className="text-slate-500">per {selectedProduct.unit || 'each'}</span>
+                      </div>
+                      {selectedProduct.isAutoExtracted && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Auto-extracted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowProductDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="space-y-6">
+                {/* Description */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-2">Description</h3>
+                  <p className="text-slate-600 leading-relaxed">
+                    {selectedProduct.description || 'No description available for this product.'}
+                  </p>
+                </div>
+
+                {/* Product Details */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3">Product Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Category</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.category || 'Uncategorized'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Supplier</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.supplier || 'No supplier'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Unit</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.unit || 'each'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Part Number</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.partNumber || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Product Link */}
+                {selectedProduct.link && (
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-2">Product Link</h3>
+                    <button
+                      onClick={() => window.open(selectedProduct.link, '_blank')}
+                      className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View on supplier website
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  {selectedProduct.createdAt && (
+                    <span>Added: {new Date(selectedProduct.createdAt).toLocaleDateString()}</span>
+                  )}
+                  {selectedProduct.updatedAt && selectedProduct.createdAt !== selectedProduct.updatedAt && (
+                    <span className="ml-4">Updated: {new Date(selectedProduct.updatedAt).toLocaleDateString()}</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingProduct(selectedProduct);
+                      setProductFormData({
+                        name: selectedProduct.name,
+                        price: selectedProduct.price.toString(),
+                        description: selectedProduct.description || '',
+                        category: selectedProduct.category || '',
+                        supplier: selectedProduct.supplier || '',
+                        link: selectedProduct.link || '',
+                        unit: selectedProduct.unit || 'each',
+                        partNumber: selectedProduct.partNumber || '',
+                        isAutoExtracted: selectedProduct.isAutoExtracted || false,
+                        image: selectedProduct.image || null
+                      });
+                      setShowProductDetail(false);
+                      setShowProductForm(true);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Product
+                  </button>
+                  <button
+                    onClick={() => {
+                      addProductToEstimate(selectedProduct);
+                      setShowProductDetail(false);
+                    }}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add to Estimate
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pack Detail Modal */}
+      {showPackDetail && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
+                  <p className="text-slate-600">{selectedPack.description}</p>
+                  {selectedPack.category && (
+                    <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-md text-sm font-medium mt-2">
+                      {selectedPack.category}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setShowPackDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {selectedPack.products?.length || 0}
+                  </div>
+                  <div className="text-sm text-slate-600">Products in Pack</div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    ${selectedPack.products?.reduce((sum, p) => sum + (p.price * p.quantity), 0).toFixed(2) || '0.00'}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Value</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {selectedPack.products && selectedPack.products.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
+                  {selectedPack.products.map((product, index) => (
+                    <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                          {product.image ? (
+                            <img 
+                              src={product.image} 
+                              alt={product.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-slate-800">{product.name}</h4>
+                          {product.partNumber && (
+                            <p className="text-xs text-slate-500">Part: {product.partNumber}</p>
+                          )}
+                          <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updatePackProductQuantity(selectedPack, index, Math.max(1, product.quantity - 1))}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-8 text-center font-medium">{product.quantity}</span>
+                          <button
+                            onClick={() => updatePackProductQuantity(selectedPack, index, product.quantity + 1)}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeProductFromPack(selectedPack, index)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No products in pack</h3>
+                  <p className="text-slate-500">Edit this pack to add products</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Created: {new Date(selectedPack.createdAt).toLocaleDateString()}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addPackToEstimate(selectedPack)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add to Estimate
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingPack(selectedPack);
+                      setPackFormData({
+                        name: selectedPack.name,
+                        description: selectedPack.description || '',
+                        category: selectedPack.category || '',
+                        products: selectedPack.products || [],
+                        image: selectedPack.image || null
+                      });
+                      setShowPackDetail(false);
+                      setShowPackForm(true);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Pack
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project Detail Modal */}
+      {showProjectDetail && selectedProjectForDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
+                  <p className="text-slate-600">{selectedProjectForDetail.description}</p>
+                  {selectedProjectForDetail.address && (
+                    <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
+                      <MapPin className="w-4 h-4" />
+                      {selectedProjectForDetail.address}
+                    </p>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setShowProjectDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {selectedProjectForDetail.items?.length || 0}
+                  </div>
+                  <div className="text-sm text-slate-600">Products</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {getProjectItemCount(selectedProjectForDetail)}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Items</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">
+                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Cost</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
+                  {selectedProjectForDetail.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-slate-800">{item.name}</h4>
+                        <p className="text-sm text-slate-500">{item.description}</p>
+                        {item.partNumber && (
+                          <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
+                        )}
+                        {item.fromPack && (
+                          <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
+                          <div className="text-sm text-slate-500">x{item.quantity}</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <button
+                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
+                  <p className="text-slate-500">Add products from the Product Library to get started</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
+                  {selectedProjectForDetail.lastModified && (
+                    <span className="ml-4">
+                      Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => exportToPDF(selectedProjectForDetail)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={() => setCurrentProject(selectedProjectForDetail)}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    Set Active
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project Form Modal */}
+      {showProjectForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingProject ? 'Edit Project' : 'Create New Project'}
+            </h2>
+            <form onSubmit={handleProjectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  value={projectFormData.name}
+                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter project name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={projectFormData.description}
+                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  rows={3}
+                  placeholder="Project description"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={projectFormData.address}
+                  onChange={(e) => setProjectFormData({...projectFormData, address: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Project address"
+                />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProjectForm(false);
+                    setProjectFormData({ name: '', description: '', address: '' });
+                    setEditingProject(null);
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
