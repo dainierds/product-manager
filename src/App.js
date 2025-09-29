@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText, Minus } from 'lucide-react';
+import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText, Minus, Phone, MapPin, User, Image } from 'lucide-react';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
@@ -26,13 +26,17 @@ const App = () => {
   const [showProductDetail, setShowProductDetail] = useState(false);
   const [showPackDetail, setShowPackDetail] = useState(false);
   const [showProjectDetail, setShowProjectDetail] = useState(false);
+  const [showSupplierDetail, setShowSupplierDetail] = useState(false);
+  const [showProductSelector, setShowProductSelector] = useState(false);
   
   const [editingProject, setEditingProject] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPack, setEditingPack] = useState(null);
+  const [editingSupplier, setEditingSupplier] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedPack, setSelectedPack] = useState(null);
   const [selectedProjectForDetail, setSelectedProjectForDetail] = useState(null);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [currentProject, setCurrentProject] = useState(null);
   
   const [loading, setLoading] = useState(false);
@@ -41,7 +45,10 @@ const App = () => {
   const [notification, setNotification] = useState(null);
   const [isExtracting, setIsExtracting] = useState(false);
   
-  // Estados para controles de Pack
+  // Product selector states
+  const [productSelectorSearch, setProductSelectorSearch] = useState('');
+  
+  // States for Pack controls
   const [packProductQuantities, setPackProductQuantities] = useState({});
   const [removedPackProducts, setRemovedPackProducts] = useState(new Set());
   
@@ -69,7 +76,8 @@ const App = () => {
     name: '',
     description: '',
     category: '',
-    products: []
+    products: [],
+    image: null
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -81,7 +89,8 @@ const App = () => {
     name: '',
     contact: '',
     email: '',
-    phone: ''
+    phone: '',
+    extension: ''
   });
 
   // Initialize and load data
@@ -112,7 +121,39 @@ const App = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // FUNCIÓN DE AUTO-EXTRACCIÓN DESDE APP (1).JS
+  // Enhanced contact functions
+  const handleEmailClick = (email) => {
+    window.location.href = `mailto:${email}`;
+  };
+
+  const handlePhoneClick = (phone, extension = '') => {
+    const phoneNumber = extension ? `${phone},${extension}` : phone;
+    window.location.href = `tel:${phoneNumber}`;
+  };
+
+  // Delete project function
+  const handleProjectDelete = async (project) => {
+    if (window.confirm(`Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`)) {
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'projects', project.id));
+        await loadData();
+        showNotification('Project deleted successfully', 'success');
+        
+        // Clear current project if it was the deleted one
+        if (currentProject?.id === project.id) {
+          setCurrentProject(null);
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        showNotification('Error deleting project', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // AUTO-EXTRACTION FUNCTION FROM APP (1).JS
   const extractProductInfo = async (url) => {
     setIsExtracting(true);
     try {
@@ -249,10 +290,10 @@ const App = () => {
       }));
       if (suppliersData.length === 0) {
         const defaultSuppliers = [
-          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001' },
-          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002' },
-          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003' },
-          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004' }
+          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001', extension: '' },
+          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002', extension: '123' },
+          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003', extension: '' },
+          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004', extension: '456' }
         ];
         for (const supplier of defaultSuppliers) {
           await addDoc(collection(db, 'suppliers'), {
@@ -391,12 +432,49 @@ const App = () => {
       }
       
       await loadData();
-      setPackFormData({ name: '', description: '', category: '', products: [] });
+      setPackFormData({ name: '', description: '', category: '', products: [], image: null });
       setShowPackForm(false);
       setEditingPack(null);
     } catch (error) {
       console.error('Error saving pack:', error);
       showNotification('Error saving pack', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Supplier functions
+  const handleSupplierSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!supplierFormData.name) {
+      showNotification('Please enter supplier name', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const supplierData = {
+        ...supplierFormData,
+        createdAt: editingSupplier ? editingSupplier.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingSupplier) {
+        await updateDoc(doc(db, 'suppliers', editingSupplier.id), supplierData);
+        showNotification('Supplier updated successfully!', 'success');
+      } else {
+        await addDoc(collection(db, 'suppliers'), supplierData);
+        showNotification('Supplier added successfully!', 'success');
+      }
+
+      await loadData();
+      setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
+      setShowSupplierForm(false);
+      setEditingSupplier(null);
+    } catch (error) {
+      console.error('Error saving supplier:', error);
+      showNotification('Error saving supplier', 'error');
     } finally {
       setLoading(false);
     }
@@ -416,6 +494,52 @@ const App = () => {
         setLoading(false);
       }
     }
+  };
+
+  // Product selector functions
+  const filteredProductsForSelector = products.filter(product =>
+    product.name.toLowerCase().includes(productSelectorSearch.toLowerCase()) ||
+    (product.partNumber && product.partNumber.toLowerCase().includes(productSelectorSearch.toLowerCase()))
+  );
+
+  const addProductToPack = (product) => {
+    const isAlreadyAdded = packFormData.products.some(p => p.id === product.id);
+    if (isAlreadyAdded) {
+      showNotification('Product already added to pack', 'info');
+      return;
+    }
+
+    setPackFormData({
+      ...packFormData,
+      products: [...packFormData.products, {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        partNumber: product.partNumber || '',
+        quantity: 1,
+        image: product.image
+      }]
+    });
+    showNotification(`${product.name} added to pack`, 'success');
+  };
+
+  const removeProductFromFormPack = (productId) => {
+    setPackFormData({
+      ...packFormData,
+      products: packFormData.products.filter(p => p.id !== productId)
+    });
+    showNotification('Product removed from pack', 'success');
+  };
+
+  const updateFormPackProductQuantity = (productId, newQuantity) => {
+    if (newQuantity < 1) return;
+    
+    setPackFormData({
+      ...packFormData,
+      products: packFormData.products.map(p => 
+        p.id === productId ? { ...p, quantity: newQuantity } : p
+      )
+    });
   };
 
   // NEW PACK FUNCTIONS FOR QUANTITY CONTROL AND REMOVAL
@@ -469,11 +593,11 @@ const App = () => {
     }
   };
 
-  // SISTEMA DE ESTIMADOS CORREGIDO
+  // ESTIMATE SYSTEM CORRECTED
   const addProductToEstimate = async (product) => {
     let project = currentProject;
     
-    // Si no hay proyecto activo, crear uno nuevo
+    // If no active project, create a new one
     if (!project) {
       const newProjectData = {
         name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
@@ -496,14 +620,14 @@ const App = () => {
       }
     }
     
-    // Verificar si el producto ya existe en el estimado
+    // Check if product already exists in estimate
     const exists = project.items?.find(i => i.productId === product.id);
     if (exists) {
       showNotification(`${product.name} is already in the estimate`, 'info');
       return;
     }
     
-    // Crear nuevo item
+    // Create new item
     const item = {
       id: Date.now() + Math.random(),
       productId: product.id,
@@ -519,7 +643,7 @@ const App = () => {
       addedAt: new Date().toISOString(),
     };
     
-    // Actualizar proyecto
+    // Update project
     const updatedItems = [...(project.items || []), item];
     const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
     
@@ -531,14 +655,14 @@ const App = () => {
     };
     
     try {
-      // Actualizar en Firebase
+      // Update in Firebase
       await updateDoc(doc(db, 'projects', project.id), {
         items: updatedItems,
         total: updatedTotal,
         lastModified: new Date().toISOString()
       });
       
-      // Actualizar estados locales
+      // Update local states
       setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
       setCurrentProject(updatedProject);
       showNotification(`Added ${product.name} to estimate`, 'success');
@@ -548,7 +672,7 @@ const App = () => {
     }
   };
 
-  // NUEVA FUNCIÓN: Añadir pack al estimado (añade todos los productos del pack)
+  // NEW FUNCTION: Add pack to estimate (adds all pack products)
   const addPackToEstimate = async (pack) => {
     if (!pack.products || pack.products.length === 0) {
       showNotification('This pack has no products', 'error');
@@ -557,7 +681,7 @@ const App = () => {
 
     let project = currentProject;
     
-    // Si no hay proyecto activo, crear uno nuevo
+    // If no active project, create a new one
     if (!project) {
       const newProjectData = {
         name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
@@ -580,12 +704,12 @@ const App = () => {
       }
     }
 
-    // Añadir todos los productos del pack
+    // Add all pack products
     const newItems = [];
     let addedCount = 0;
     
     for (const packProduct of pack.products) {
-      // Verificar si el producto ya existe
+      // Check if product already exists
       const exists = project.items?.find(i => i.productId === packProduct.id);
       if (!exists) {
         const item = {
@@ -613,7 +737,7 @@ const App = () => {
       return;
     }
 
-    // Actualizar proyecto
+    // Update project
     const updatedItems = [...(project.items || []), ...newItems];
     const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
     
@@ -625,14 +749,14 @@ const App = () => {
     };
     
     try {
-      // Actualizar en Firebase
+      // Update in Firebase
       await updateDoc(doc(db, 'projects', project.id), {
         items: updatedItems,
         total: updatedTotal,
         lastModified: new Date().toISOString()
       });
       
-      // Actualizar estados locales
+      // Update local states
       setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
       setCurrentProject(updatedProject);
       showNotification(`Added ${addedCount} products from pack "${pack.name}" to estimate`, 'success');
@@ -642,7 +766,7 @@ const App = () => {
     }
   };
 
-  // NUEVA FUNCIÓN: Eliminar producto del proyecto
+  // NEW FUNCTION: Remove product from project
   const removeProductFromProject = async (project, itemId) => {
     try {
       const updatedItems = project.items.filter(item => item.id !== itemId);
@@ -655,14 +779,14 @@ const App = () => {
         lastModified: new Date().toISOString()
       };
       
-      // Actualizar en Firebase
+      // Update in Firebase
       await updateDoc(doc(db, 'projects', project.id), {
         items: updatedItems,
         total: updatedTotal,
         lastModified: new Date().toISOString()
       });
       
-      // Actualizar estados locales
+      // Update local states
       setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
       setCurrentProject(current => current?.id === project.id ? updatedProject : current);
       setSelectedProjectForDetail(updatedProject);
@@ -674,7 +798,7 @@ const App = () => {
     }
   };
 
-  // NUEVA FUNCIÓN: Actualizar cantidad de producto en proyecto
+  // NEW FUNCTION: Update product quantity in project
   const updateProductQuantity = async (project, itemId, newQuantity) => {
     if (newQuantity < 1) return;
     
@@ -691,14 +815,14 @@ const App = () => {
         lastModified: new Date().toISOString()
       };
       
-      // Actualizar en Firebase
+      // Update in Firebase
       await updateDoc(doc(db, 'projects', project.id), {
         items: updatedItems,
         total: updatedTotal,
         lastModified: new Date().toISOString()
       });
       
-      // Actualizar estados locales
+      // Update local states
       setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
       setCurrentProject(current => current?.id === project.id ? updatedProject : current);
       setSelectedProjectForDetail(updatedProject);
@@ -710,7 +834,7 @@ const App = () => {
     }
   };
 
-  // FUNCIÓN: Export to PDF REAL con jsPDF simulado pero generando PDF válido
+  // IMPROVED PDF EXPORT FUNCTION with correct field structure
   const exportToPDF = (project) => {
     if (!project.items || project.items.length === 0) {
       showNotification('No items in this project to export', 'error');
@@ -720,7 +844,7 @@ const App = () => {
     const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
     
-    // Simular jsPDF - crear contenido HTML que se puede convertir a PDF
+    // Create HTML content with improved PDF structure
     const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -732,9 +856,11 @@ const App = () => {
             .project-info { margin-bottom: 20px; }
             .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
             .products-table th, .products-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .products-table th { background-color: #f5f5f5; }
-            .summary { font-weight: bold; }
+            .products-table th { background-color: #f5f5f5; font-weight: bold; }
+            .products-table td { vertical-align: top; }
+            .summary { font-weight: bold; margin-top: 20px; }
             .footer { margin-top: 30px; font-size: 12px; color: #666; }
+            .url-cell { word-break: break-all; max-width: 150px; }
         </style>
     </head>
     <body>
@@ -751,28 +877,29 @@ const App = () => {
         </div>
 
         <h3>PRODUCTS:</h3>
-       <table class="products-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Product Name</th>
-            <th>Part Number/SKU</th>
-            <th>Quantity</th>
-          <th>Supplier</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${project.items.map((item, index) => `
-        <tr>
-            <td>${index + 1}</td>
-            <td>${item.name}</td>
-            <td>${item.partNumber || 'N/A'}</td>
-            <td>${item.link || 'N/A'}</td>
-            <td>${item.quantity}</td>
-            <td>${item.supplier || 'N/A'}</td>
-             </tr>
-          `).join('')}
-          </tbody>
+        <table class="products-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 25%;">Name</th>
+                    <th style="width: 30%;">Description</th>
+                    <th style="width: 15%;">Part Number</th>
+                    <th style="width: 15%;" class="url-cell">URL</th>
+                    <th style="width: 10%;">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${project.items.map((item, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${item.name}</td>
+                        <td>${item.description || 'No description'}</td>
+                        <td>${item.partNumber || 'N/A'}</td>
+                        <td class="url-cell">${item.link || 'N/A'}</td>
+                        <td>${item.quantity}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
         </table>
 
         <div class="summary">
@@ -787,7 +914,7 @@ const App = () => {
     </html>
     `;
     
-    // Crear un blob con el HTML y descargarlo como HTML (que se puede imprimir como PDF)
+    // Create blob and download
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -801,7 +928,7 @@ const App = () => {
     showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
   };
 
-  // Share estimate function MEJORADA
+  // Enhanced share estimate function
   const shareEstimate = (project, method) => {
     if (!project.items || project.items.length === 0) {
       showNotification('No items in this project to share', 'error');
@@ -836,7 +963,7 @@ Generated by ECP Assistant`;
   const getProjectTotal = (project) => project.total || 0;
   const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
 
-  // NUEVA FUNCIÓN: Filtrar proyectos por búsqueda
+  // Filter projects by search
   const filteredProjects = projects.filter(project => {
     const searchLower = projectSearchTerm.toLowerCase();
     return (
@@ -944,7 +1071,7 @@ Generated by ECP Assistant`;
     </div>
   );
 
-  // Projects View MEJORADO con búsqueda
+  // Projects View
   const renderProjectsView = () => (
     <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
@@ -961,7 +1088,7 @@ Generated by ECP Assistant`;
         </button>
       </div>
 
-      {/* NUEVA BÚSQUEDA DE PROYECTOS */}
+      {/* Project search */}
       <div className="mb-8">
         <div className="flex-1 relative">
           <input
@@ -983,16 +1110,19 @@ Generated by ECP Assistant`;
             const formattedDate = new Date(project.createdAt).toLocaleDateString();
             
             return (
-              <div key={project.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
+              <div 
+                key={project.id} 
+                className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
                     <p className="text-gray-600 text-sm">{project.description}</p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {/* BOTÓN OJO CORREGIDO */}
                     <button 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedProjectForDetail(project);
                         setShowProjectDetail(true);
                       }}
@@ -1002,7 +1132,8 @@ Generated by ECP Assistant`;
                       <Eye className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setEditingProject(project);
                         setProjectFormData({
                           name: project.name,
@@ -1017,33 +1148,58 @@ Generated by ECP Assistant`;
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => setCurrentProject(project)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleProjectDelete(project);
+                      }}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      title="Delete project"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentProject(project);
+                      }}
                       className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
                       title="Set as active project"
                     >
                       <PlusCircle className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => exportToPDF(project)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportToPDF(project);
+                      }}
                       className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
                       title="Export to PDF"
                     >
                       <Download className="w-4 h-4" />
                     </button>
                     <div className="relative group">
-                      <button className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors">
+                      <button 
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                      >
                         <Share className="w-4 h-4" />
                       </button>
                       <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                         <button 
-                          onClick={() => shareEstimate(project, 'email')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            shareEstimate(project, 'email');
+                          }}
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
                         >
                           <Mail className="w-4 h-4" />
                           Email
                         </button>
                         <button 
-                          onClick={() => shareEstimate(project, 'teams')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            shareEstimate(project, 'teams');
+                          }}
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
                         >
                           <MessageSquare className="w-4 h-4" />
@@ -1211,7 +1367,7 @@ Generated by ECP Assistant`;
     );
   };
 
-  // NUEVO DISEÑO DE PRODUCTOS basado en la imagen
+  // Products list design
   const renderProductsList = (filteredProducts) => {
     if (filteredProducts.length === 0) {
       return (
@@ -1240,7 +1396,7 @@ Generated by ECP Assistant`;
             key={product.id}
             className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 relative"
           >
-            {/* Icono del producto - esquina superior izquierda */}
+            {/* Product icon - top left corner */}
             <div className="absolute top-4 left-4">
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 {product.image ? (
@@ -1255,7 +1411,7 @@ Generated by ECP Assistant`;
               </div>
             </div>
 
-            {/* Badges y botones - esquina superior derecha */}
+            {/* Badges and buttons - top right corner */}
             <div className="absolute top-4 right-4 flex items-center gap-2">
               {product.isAutoExtracted && (
                 <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium flex items-center gap-1">
@@ -1264,7 +1420,8 @@ Generated by ECP Assistant`;
                 </span>
               )}
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setEditingProduct(product);
                   setProductFormData({
                     name: product.name,
@@ -1286,7 +1443,8 @@ Generated by ECP Assistant`;
                 <Edit3 className="w-4 h-4" />
               </button>
               <button
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation();
                   if (window.confirm('Are you sure you want to delete this product?')) {
                     setLoading(true);
                     try {
@@ -1308,9 +1466,9 @@ Generated by ECP Assistant`;
               </button>
             </div>
 
-            {/* Contenido principal - con margen para el icono */}
+            {/* Main content - with margin for icon */}
             <div className="mt-16">
-              {/* Título del producto */}
+              {/* Product title */}
               <h3 
                 className="font-bold text-slate-800 text-lg mb-3 cursor-pointer hover:text-blue-600 transition-colors"
                 onClick={() => {
@@ -1330,12 +1488,12 @@ Generated by ECP Assistant`;
                 </div>
               )}
 
-              {/* Descripción */}
+              {/* Description */}
               <p className="text-slate-600 text-sm mb-4 leading-relaxed min-h-[2.5rem]">
-                {product.description || 'Producto de Home Depot. Precio estimado basado en categoría.'}
+                {product.description || 'Home Depot product. Estimated price based on category.'}
               </p>
 
-              {/* Precio y proveedor */}
+              {/* Price and supplier */}
               <div className="flex items-center justify-between mb-4">
                 <span className="text-blue-600 font-bold text-xl">
                   ${Number(product.price).toFixed(2)} {product.unit || 'each'}
@@ -1345,14 +1503,14 @@ Generated by ECP Assistant`;
                 </span>
               </div>
 
-              {/* Categoría */}
+              {/* Category */}
               <div className="mb-4">
                 <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-sm font-medium">
                   {product.category || 'Plumbing'}
                 </span>
               </div>
 
-             {/* Enlaces y botones inferiores */}
+              {/* Links and bottom buttons */}
               <div className="flex items-center justify-between">
                 {product.link ? (
                   <button
@@ -1366,7 +1524,7 @@ Generated by ECP Assistant`;
                   <span className="text-slate-400 text-sm">No product link</span>
                 )}
 
-                {/* Botón de agregar al estimado */}
+                {/* Add to estimate button */}
                 <button
                   onClick={() => addProductToEstimate(product)}
                   className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
@@ -1382,7 +1540,7 @@ Generated by ECP Assistant`;
     );
   };
 
-  // PACKS REORGANIZADO - Quitar texto y mover ojo abajo
+  // ENHANCED PACKS LIST with image support
   const renderPacksList = (filteredPacks) => {
     if (filteredPacks.length === 0) {
       return (
@@ -1408,9 +1566,17 @@ Generated by ECP Assistant`;
             className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
           >
             <div className="flex gap-4">
-              {/* Icon Section */}
+              {/* Icon Section with custom image support */}
               <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Package className="w-8 h-8 text-green-600" />
+                {pack.image ? (
+                  <img 
+                    src={pack.image} 
+                    alt={pack.name}
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                ) : (
+                  <Package className="w-8 h-8 text-green-600" />
+                )}
               </div>
 
               {/* Content Section */}
@@ -1432,7 +1598,7 @@ Generated by ECP Assistant`;
                 </div>
               </div>
 
-              {/* Vertical Buttons Section - Right Side (sin ojo) */}
+              {/* Vertical Buttons Section - Right Side */}
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => addPackToEstimate(pack)}
@@ -1448,7 +1614,8 @@ Generated by ECP Assistant`;
                       name: pack.name,
                       description: pack.description || '',
                       category: pack.category || '',
-                      products: pack.products || []
+                      products: pack.products || [],
+                      image: pack.image || null
                     });
                     setShowPackForm(true);
                   }}
@@ -1467,7 +1634,7 @@ Generated by ECP Assistant`;
               </div>
             </div>
 
-            {/* Bottom Section - NUEVO BOTÓN OJO */}
+            {/* Bottom Section - View Items Button */}
             <div className="mt-4 pt-4 border-t border-slate-100">
               <button
                 onClick={() => {
@@ -1476,7 +1643,8 @@ Generated by ECP Assistant`;
                 }}
                 className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
               >
-                👁 View Items
+                <Eye className="w-4 h-4" />
+                View Items
               </button>
             </div>
           </div>
@@ -1485,7 +1653,7 @@ Generated by ECP Assistant`;
     );
   };
 
-  // Settings View
+  // ENHANCED Settings View with Supplier Contact Features
   const renderSettingsView = () => (
     <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="bg-white rounded-2xl p-8 shadow-sm">
@@ -1535,7 +1703,7 @@ Generated by ECP Assistant`;
             </div>
           </div>
 
-          {/* Suppliers */}
+          {/* ENHANCED Suppliers with Contact Features */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
@@ -1547,31 +1715,92 @@ Generated by ECP Assistant`;
                 Add Supplier
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {suppliers.map(supplier => (
-                <div key={supplier.id} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
-                  <span>{supplier.name}</span>
-                  <button 
-                    onClick={async () => {
-                      if (suppliers.length <= 1) {
-                        showNotification('Must keep at least one supplier', 'error');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
-                        try {
-                          await deleteDoc(doc(db, 'suppliers', supplier.id));
-                          await loadData();
-                          showNotification('Supplier deleted successfully', 'success');
-                        } catch (error) {
-                          console.error('Error deleting supplier:', error);
-                          showNotification('Error deleting supplier', 'error');
-                        }
-                      }
-                    }}
-                    className="hover:bg-green-200 rounded p-1 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                <div key={supplier.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 hover:shadow-md transition-all">
+                  <div className="flex items-start justify-between mb-3">
+                    <h4 
+                      className="font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => {
+                        setSelectedSupplier(supplier);
+                        setShowSupplierDetail(true);
+                      }}
+                    >
+                      {supplier.name}
+                    </h4>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingSupplier(supplier);
+                          setSupplierFormData({
+                            name: supplier.name,
+                            contact: supplier.contact || '',
+                            email: supplier.email || '',
+                            phone: supplier.phone || '',
+                            extension: supplier.extension || ''
+                          });
+                          setShowSupplierForm(true);
+                        }}
+                        className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                        title="Edit supplier"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          if (suppliers.length <= 1) {
+                            showNotification('Must keep at least one supplier', 'error');
+                            return;
+                          }
+                          if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
+                            try {
+                              await deleteDoc(doc(db, 'suppliers', supplier.id));
+                              await loadData();
+                              showNotification('Supplier deleted successfully', 'success');
+                            } catch (error) {
+                              console.error('Error deleting supplier:', error);
+                              showNotification('Error deleting supplier', 'error');
+                            }
+                          }
+                        }}
+                        className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        title="Delete supplier"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    {supplier.contact && (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <User className="w-3 h-3" />
+                        <span>{supplier.contact}</span>
+                      </div>
+                    )}
+                    {supplier.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-slate-600" />
+                        <button
+                          onClick={() => handleEmailClick(supplier.email)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {supplier.email}
+                        </button>
+                      </div>
+                    )}
+                    {supplier.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3 h-3 text-slate-600" />
+                        <button
+                          onClick={() => handlePhoneClick(supplier.phone, supplier.extension)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {supplier.phone}{supplier.extension ? ` ext. ${supplier.extension}` : ''}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1614,12 +1843,109 @@ Generated by ECP Assistant`;
     </div>
   );
 
+  // PRODUCT SELECTOR MODAL for Pack Creation - FIXED Z-INDEX
+  const renderProductSelector = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[150] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-slate-800">Select Products for Pack</h2>
+            <button 
+              onClick={() => {
+                setShowProductSelector(false);
+                setProductSelectorSearch('');
+              }}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <X className="w-6 h-6 text-slate-400" />
+            </button>
+          </div>
+          
+          {/* Search */}
+          <div className="relative">
+            <input
+              type="text"
+              value={productSelectorSearch}
+              onChange={(e) => setProductSelectorSearch(e.target.value)}
+              placeholder="Search products by name or part number..."
+              className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {filteredProductsForSelector.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredProductsForSelector.map((product) => (
+                <div
+                  key={product.id}
+                  className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => addProductToPack(product)}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {product.image ? (
+                        <img 
+                          src={product.image} 
+                          alt={product.name}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      ) : (
+                        <Package className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
+                      {product.partNumber && (
+                        <p className="text-xs text-slate-500">{product.partNumber}</p>
+                      )}
+                      <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{product.category}</span>
+                    <button className="text-green-600 hover:bg-green-50 p-1 rounded transition-colors">
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
+              <p className="text-slate-500">No products found matching your search</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 border-t border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">
+              Selected: {packFormData.products.length} products
+            </span>
+            <button
+              onClick={() => {
+                setShowProductSelector(false);
+                setProductSelectorSearch('');
+              }}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Notification System */}
       {notification && (
         <div
-          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+          className={`fixed top-4 right-4 z-[9999] px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
             notification.type === 'success'
               ? 'bg-green-500 text-white'
               : notification.type === 'error'
@@ -1647,190 +1973,12 @@ Generated by ECP Assistant`;
       {currentView === 'products' && renderProductsView()}
       {currentView === 'settings' && renderSettingsView()}
 
-      {/* NUEVO MODAL: Detalles/Edición de Proyecto */}
-      {showProjectDetail && selectedProjectForDetail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-slate-800">Project Details</h2>
-              <button 
-                onClick={() => {
-                  setShowProjectDetail(false);
-                  setSelectedProjectForDetail(null);
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
+      {/* Product Selector Modal - Highest Priority */}
+      {showProductSelector && renderProductSelector()}
 
-            <div className="p-6">
-              {/* Información del proyecto */}
-              <div className="mb-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">{selectedProjectForDetail.name}</h3>
-                    <p className="text-slate-600 mb-2">{selectedProjectForDetail.description}</p>
-                    {selectedProjectForDetail.address && (
-                      <p className="text-slate-500 text-sm">{selectedProjectForDetail.address}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-green-600">
-                      ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
-                    </div>
-                    <div className="text-slate-500 text-sm">
-                      {getProjectItemCount(selectedProjectForDetail)} items total
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Lista de productos */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-slate-800">Products in Project</h4>
-                  <button
-                    onClick={() => {
-                      setCurrentProject(selectedProjectForDetail);
-                      setCurrentView('products');
-                      setShowProjectDetail(false);
-                      setSelectedProjectForDetail(null);
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                  >
-                    Add More Products
-                  </button>
-                </div>
-
-                {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedProjectForDetail.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                        <div className="flex-1">
-                          <h5 className="font-medium text-slate-800">{item.name}</h5>
-                          {item.partNumber && (
-                            <p className="text-xs text-slate-500 bg-slate-200 inline-block px-2 py-1 rounded mt-1">
-                              {item.partNumber}
-                            </p>
-                          )}
-                          <p className="text-slate-600 text-sm">{item.description}</p>
-                          <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
-                            <span>Category: {item.category}</span>
-                            <span>Supplier: {item.supplier}</span>
-                            {item.link && (
-                              <a href={item.link} target="_blank" rel="noopener noreferrer" 
-                                 className="text-blue-500 hover:underline flex items-center gap-1">
-                                <ExternalLink className="w-3 h-3" />
-                                View Product
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity - 1)}
-                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="font-medium text-slate-800 min-w-[2rem] text-center">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
-                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-slate-800">
-                              ${(item.price * item.quantity).toFixed(2)}
-                            </div>
-                            <div className="text-slate-500 text-sm">
-                              ${item.price.toFixed(2)} each
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Remove this product from the project?')) {
-                                removeProductFromProject(selectedProjectForDetail, item.id);
-                              }
-                            }}
-                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-                    <p className="text-slate-500">No products in this project yet</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Acciones del proyecto */}
-              <div className="flex gap-3 pt-6 border-t border-slate-200">
-                <button
-                  onClick={() => exportToPDF(selectedProjectForDetail)}
-                  className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                >
-                  <Download className="w-4 h-4" />
-                  Export PDF
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingProject(selectedProjectForDetail);
-                    setProjectFormData({
-                      name: selectedProjectForDetail.name,
-                      description: selectedProjectForDetail.description || '',
-                      address: selectedProjectForDetail.address || ''
-                    });
-                    setShowProjectDetail(false);
-                    setSelectedProjectForDetail(null);
-                    setShowProjectForm(true);
-                  }}
-                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Project
-                </button>
-                <div className="relative group">
-                  <button className="px-4 py-3 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors">
-                    <Share className="w-4 h-4" />
-                  </button>
-                  <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                    <button 
-                      onClick={() => shareEstimate(selectedProjectForDetail, 'email')}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                    >
-                      <Mail className="w-4 h-4" />
-                      Email
-                    </button>
-                    <button 
-                      onClick={() => shareEstimate(selectedProjectForDetail, 'teams')}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      Teams
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add/Edit Project */}
+      {/* Project Form Modal */}
       {showProjectForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold text-slate-800 mb-4">
               {editingProject ? 'Edit Project' : 'Create New Project'}
@@ -1898,436 +2046,328 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Modal Add/Edit Product with Auto-extraction */}
-      {showProductForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">
-              {editingProduct ? 'Edit Product' : 'Add New Product'}
-            </h2>
-            
-            {isExtracting && (
-              <div className="mb-4 p-4 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2">
-                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                Extracting product information from URL...
+      // Product Form Modal - SECCIÓN CORREGIDA
+{showProductForm && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <h2 className="text-xl font-bold text-slate-800 mb-4">
+        {editingProduct ? 'Edit Product' : 'Add New Product'}
+      </h2>
+      <form onSubmit={handleProductSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Product URL (Optional - Auto-extract info)
+          </label>
+          <input
+            type="url"
+            value={productFormData.link}
+            onChange={(e) => handleProductUrlChange(e.target.value)}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            placeholder="https://www.homedepot.com/..."
+          />
+          {isExtracting && (
+            <p className="text-sm text-blue-600 mt-1 flex items-center gap-2">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+              Extracting product information...
+            </p>
+          )}
+        </div>
+
+        {/* SECCIÓN DE IMAGEN CORREGIDA */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Product Image
+          </label>
+          <div className="flex items-center gap-4">
+            {productFormData.image && (
+              <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-200">
+                <img 
+                  src={productFormData.image} 
+                  alt="Product preview" 
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
-            
-            <form onSubmit={handleProductSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link</label>
-                <input
-                  type="url"
-                  value={productFormData.link}
-                  onChange={(e) => {
-                    // CAMPO URL ARREGLADO: Permite escribir libremente
-                    if (!editingProduct) {
-                      handleProductUrlChange(e.target.value);
-                    } else {
-                      setProductFormData(prev => ({ ...prev, link: e.target.value }));
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="https://... (Auto-extraction will fill details)"
-                  disabled={isExtracting}
-                />
-                {!editingProduct && (
-                  <p className="mt-2 text-xs text-slate-500">Compatible: Home Depot, Lowe's, Amazon, and more</p>
-                )}
-              </div>
+            <div className="flex-1">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                      setProductFormData(prev => ({ ...prev, image: e.target.result }));
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              <p className="mt-1 text-xs text-slate-500">Upload an image to replace the default icon</p>
+            </div>
+            {productFormData.image && (
+              <button
+                type="button"
+                onClick={() => setProductFormData(prev => ({ ...prev, image: null }))}
+                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Image</label>
-                <div className="flex items-center gap-4">
-                  {productFormData.image && (
-                    <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-200">
-                      <img 
-                        src={productFormData.image} 
-                        alt="Product preview" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (e) => {
-                            setProductFormData(prev => ({ ...prev, image: e.target.result }));
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                    <p className="mt-1 text-xs text-slate-500">Upload an image to replace the default icon</p>
-                  </div>
-                  {productFormData.image && (
-                    <button
-                      type="button"
-                      onClick={() => setProductFormData(prev => ({ ...prev, image: null }))}
-                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Product Name *
+          </label>
+          <input
+            type="text"
+            value={productFormData.name}
+            onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            placeholder="Enter product name"
+            required
+          />
+        </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Price *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={productFormData.price}
+              onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="0.00"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Unit
+            </label>
+            <select
+              value={productFormData.unit}
+              onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="each">Each</option>
+              <option value="box">Box</option>
+              <option value="pack">Pack</option>
+              <option value="ft">Feet</option>
+              <option value="yard">Yard</option>
+              <option value="sqft">Sq Ft</option>
+              <option value="gallon">Gallon</option>
+              <option value="lb">Pound</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={productFormData.description}
+            onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            rows={3}
+            placeholder="Product description"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Category
+            </label>
+            <select
+              value={productFormData.category}
+              onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="">Select category</option>
+              {categories.map(category => (
+                <option key={category.id} value={category.name}>{category.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Supplier
+            </label>
+            <select
+              value={productFormData.supplier}
+              onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="">Select supplier</option>
+              {suppliers.map(supplier => (
+                <option key={supplier.id} value={supplier.name}>{supplier.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Part Number/SKU
+          </label>
+          <input
+            type="text"
+            value={productFormData.partNumber}
+            onChange={(e) => setProductFormData({...productFormData, partNumber: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            placeholder="Enter part number"
+          />
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowProductForm(false);
+              setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
+              setEditingProduct(null);
+            }}
+            className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
+      {/* Pack Form Modal */}
+      {showPackForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingPack ? 'Edit Pack' : 'Create New Pack'}
+            </h2>
+            <form onSubmit={handlePackSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Pack Name *
+                </label>
                 <input
                   type="text"
-                  value={productFormData.name}
-                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Enter product name"
+                  value={packFormData.name}
+                  onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter pack name"
                   required
                 />
               </div>
 
-              {/* NEW PART NUMBER/SKU FIELD */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Part Number/SKU</label>
-                <input
-                  type="text"
-                  value={productFormData.partNumber}
-                  onChange={(e) => setProductFormData({...productFormData, partNumber: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Enter part number or SKU"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                  <select
-                    value={productFormData.category}
-                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
-                  <select
-                    value={productFormData.supplier}
-                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.name}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={productFormData.price}
-                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
-                  <input
-                    type="text"
-                    value={productFormData.unit}
-                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="e.g., per piece, per foot"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
-                <textarea
-                  value={productFormData.description}
-                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  rows={3}
-                  placeholder="Product description"
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={isExtracting || loading}
-                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProductForm(false);
-                    setEditingProduct(null);
-                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Product Detail */}
-      {showProductDetail && selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
-              <button 
-                onClick={() => {
-                  setShowProductDetail(false);
-                  setSelectedProduct(null);
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="w-full h-64 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center overflow-hidden">
-                    {selectedProduct.image ? (
-                      <img 
-                        src={selectedProduct.image} 
-                        alt={selectedProduct.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
-                        <p className="text-slate-500 text-sm">No product image</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedProduct.link && (
-                    <a
-                      href={selectedProduct.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      View at {selectedProduct.supplier}
-                    </a>
-                  )}
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex items-start gap-3 mb-4">
-                      <h3 className="text-2xl font-bold text-slate-800 leading-tight">{selectedProduct.name}</h3>
-                      {selectedProduct.isAutoExtracted && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          Auto-extracted
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Part Number/SKU Display */}
-                    {selectedProduct.partNumber && (
-                      <div className="mb-4">
-                        <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
-                          Part #: {selectedProduct.partNumber}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-4 mb-4">
-                      <span className="text-3xl font-bold text-green-600">${Number(selectedProduct.price).toFixed(2)}</span>
-                      <span className="text-slate-500 text-lg">{selectedProduct.unit || 'each'}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-xl">
-                      <p className="text-slate-600 text-sm font-semibold mb-1">Category</p>
-                      <p className="text-slate-800 font-medium">{selectedProduct.category || 'No category'}</p>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl">
-                      <p className="text-slate-600 text-sm font-semibold mb-1">Supplier</p>
-                      <p className="text-slate-800 font-medium">{selectedProduct.supplier || 'No supplier'}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <p className="text-slate-600 text-sm font-semibold mb-2">Description</p>
-                    <p className="text-slate-800 leading-relaxed">{selectedProduct.description || 'No description available'}</p>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={() => {
-                        addProductToEstimate(selectedProduct);
-                        setShowProductDetail(false);
-                        setSelectedProduct(null);
-                      }}
-                      className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      Add to Estimate
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingProduct(selectedProduct);
-                        setProductFormData({
-                          name: selectedProduct.name,
-                          price: selectedProduct.price.toString(),
-                          description: selectedProduct.description || '',
-                          category: selectedProduct.category || '',
-                          supplier: selectedProduct.supplier || '',
-                          link: selectedProduct.link || '',
-                          unit: selectedProduct.unit || 'each',
-                          partNumber: selectedProduct.partNumber || '',
-                          isAutoExtracted: selectedProduct.isAutoExtracted || false,
-                          image: selectedProduct.image || null
-                        });
-                        setShowProductDetail(false);
-                        setSelectedProduct(null);
-                        setShowProductForm(true);
-                      }}
-                      className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      Edit Product
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Add/Edit Pack */}
-      {showPackForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">
-              {editingPack ? 'Edit Pack' : 'Create New Pack'}
-            </h2>
-            
-            <form onSubmit={handlePackSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
-                  <input
-                    type="text"
-                    value={packFormData.name}
-                    onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                    placeholder="Enter pack name"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                  <select
-                    value={packFormData.category}
-                    onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description
+                </label>
                 <textarea
                   value={packFormData.description}
                   onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
                   rows={3}
-                  placeholder="Enter pack description"
+                  placeholder="Pack description"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack</label>
-                <div className="border border-slate-300 rounded-xl p-4 max-h-60 overflow-y-auto">
-                  {products.length > 0 ? (
-                    <div className="space-y-2">
-                      {products.map(product => (
-                        <label key={product.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={packFormData.products.some(p => p.id === product.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setPackFormData({
-                                  ...packFormData,
-                                  products: [...packFormData.products, { 
-                                    id: product.id, 
-                                    name: product.name, 
-                                    price: product.price,
-                                    partNumber: product.partNumber || '',
-                                    quantity: 1
-                                  }]
-                                });
-                              } else {
-                                setPackFormData({
-                                  ...packFormData,
-                                  products: packFormData.products.filter(p => p.id !== product.id)
-                                });
-                              }
-                            }}
-                            className="rounded text-green-600 focus:ring-green-500"
-                          />
-                          <div className="flex-1">
-                            <span className="font-medium text-slate-800">{product.name}</span>
-                            {product.partNumber && (
-                              <span className="text-slate-400 text-xs ml-2">({product.partNumber})</span>
-                            )}
-                            <span className="text-slate-500 text-sm ml-2">${product.price}</span>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm">No products available. Add some products first.</p>
-                  )}
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Category
+                </label>
+                <select
+                  value={packFormData.category}
+                  onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                >
+                  <option value="">Select category</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.name}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Products in Pack */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Products in Pack ({packFormData.products.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductSelector(true)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Products
+                  </button>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Selected: {packFormData.products.length} products
-                </p>
+
+                {packFormData.products.length > 0 ? (
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                    {packFormData.products.map((product, index) => (
+                      <div key={product.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
+                          <p className="text-sm text-slate-500">${product.price}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateFormPackProductQuantity(product.id, Math.max(1, product.quantity - 1))}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-8 text-center font-medium">{product.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateFormPackProductQuantity(product.id, product.quantity + 1)}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeProductFromFormPack(product.id)}
+                            className="p-1 text-red-600 hover:bg-red-100 rounded ml-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
+                    <Package className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                    <p className="text-slate-500 text-sm">No products added yet</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowProductSelector(true)}
+                      className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Add your first product
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-6">
@@ -2342,8 +2382,8 @@ Generated by ECP Assistant`;
                   type="button"
                   onClick={() => {
                     setShowPackForm(false);
+                    setPackFormData({ name: '', description: '', category: '', products: [], image: null });
                     setEditingPack(null);
-                    setPackFormData({ name: '', description: '', category: '', products: [] });
                   }}
                   className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
                 >
@@ -2355,162 +2395,109 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Modal Pack Detail - UPDATED WITH PROJECT-LIKE CONTROLS */}
-      {showPackDetail && selectedPack && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-slate-800">Pack Details</h2>
-              <button 
-                onClick={() => {
-                  setShowPackDetail(false);
-                  setSelectedPack(null);
-                }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
+      {/* Supplier Form Modal */}
+      {showSupplierForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">
+              {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
+            </h2>
+            <form onSubmit={handleSupplierSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Supplier Name *
+                </label>
+                <input
+                  type="text"
+                  value={supplierFormData.name}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Enter supplier name"
+                  required
+                />
+              </div>
 
-            <div className="p-6">
-              <div className="mb-6">
-                <div className="flex items-start gap-3 mb-4">
-                  <h3 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h3>
-                  <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">Pack</span>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Contact Person
+                </label>
+                <input
+                  type="text"
+                  value={supplierFormData.contact}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="Contact person name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={supplierFormData.email}
+                  onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="email@example.com"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={supplierFormData.phone}
+                    onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="555-1234"
+                  />
                 </div>
-                <p className="text-slate-600 mb-4">{selectedPack.description}</p>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {selectedPack.products?.length || 0} products
-                  </span>
-                  {selectedPack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg">{selectedPack.category}</span>
-                  )}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Ext.
+                  </label>
+                  <input
+                    type="text"
+                    value={supplierFormData.extension}
+                    onChange={(e) => setSupplierFormData({...supplierFormData, extension: e.target.value})}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="123"
+                  />
                 </div>
               </div>
 
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-slate-800">Products in this Pack</h4>
-                  <button
-                    onClick={() => {
-                      setEditingPack(selectedPack);
-                      setPackFormData({
-                        name: selectedPack.name,
-                        description: selectedPack.description || '',
-                        category: selectedPack.category || '',
-                        products: selectedPack.products || []
-                      });
-                      setShowPackDetail(false);
-                      setSelectedPack(null);
-                      setShowPackForm(true);
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                  >
-                    Edit Pack
-                  </button>
-                </div>
-                
-                {selectedPack.products && selectedPack.products.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedPack.products.map((product, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                        <div className="flex-1">
-                          <h5 className="font-medium text-slate-800">{product.name}</h5>
-                          {product.partNumber && (
-                            <p className="text-xs text-slate-500 bg-slate-200 inline-block px-2 py-1 rounded mt-1">
-                              {product.partNumber}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
-                            <span>Price: ${Number(product.price).toFixed(2)}</span>
-                          </div>
-                        </div>
-                        
-                        {/* PROJECT-LIKE CONTROLS */}
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updatePackProductQuantity(selectedPack, index, (product.quantity || 1) - 1)}
-                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="font-medium text-slate-800 min-w-[2rem] text-center">
-                              {product.quantity || 1}
-                            </span>
-                            <button
-                              onClick={() => updatePackProductQuantity(selectedPack, index, (product.quantity || 1) + 1)}
-                              className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-slate-800">
-                              ${(product.price * (product.quantity || 1)).toFixed(2)}
-                            </div>
-                            <div className="text-slate-500 text-sm">
-                              ${product.price} each
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Remove this product from the pack?')) {
-                                removeProductFromPack(selectedPack, index);
-                              }
-                            }}
-                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-                    <p className="text-slate-500">No products in this pack</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-6 border-t border-slate-200">
+              <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => addPackToEstimate(selectedPack)}
-                  className="flex-1 bg-green-500 text-white py-3 px-4 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
                 >
-                  <Plus className="w-4 h-4" />
-                  Add Pack to Estimate
+                  {loading ? 'Saving...' : (editingSupplier ? 'Update Supplier' : 'Add Supplier')}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    setEditingPack(selectedPack);
-                    setPackFormData({
-                      name: selectedPack.name,
-                      description: selectedPack.description || '',
-                      category: selectedPack.category || '',
-                      products: selectedPack.products || []
-                    });
-                    setShowPackDetail(false);
-                    setSelectedPack(null);
-                    setShowPackForm(true);
+                    setShowSupplierForm(false);
+                    setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
+                    setEditingSupplier(null);
                   }}
-                  className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-semibold"
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
                 >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Pack
+                  Cancel
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Modal Add Category */}
+      {/* Category Form Modal */}
       {showCategoryForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
             <form onSubmit={async (e) => {
@@ -2575,83 +2562,532 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Modal Add Supplier */}
-      {showSupplierForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Supplier</h2>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!supplierFormData.name) {
-                showNotification('Supplier name is required', 'error');
-                return;
-              }
-              setLoading(true);
-              try {
-                await addDoc(collection(db, 'suppliers'), {
-                  ...supplierFormData,
-                  createdAt: new Date().toISOString()
-                });
-                await loadData();
-                setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-                setShowSupplierForm(false);
-                showNotification('Supplier added successfully!', 'success');
-              } catch (error) {
-                console.error('Error saving supplier:', error);
-                showNotification('Error saving supplier', 'error');
-              } finally {
-                setLoading(false);
-              }
-            }} className="space-y-4">
-              <input
-                type="text"
-                value={supplierFormData.name}
-                onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Supplier name"
-                required
-              />
-              <input
-                type="text"
-                value={supplierFormData.contact}
-                onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Contact person"
-              />
-              <input
-                type="email"
-                value={supplierFormData.email}
-                onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Email"
-              />
-              <input
-                type="tel"
-                value={supplierFormData.phone}
-                onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                placeholder="Phone"
-              />
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
+      {/* Project Detail Modal */}
+      {showProjectDetail && selectedProjectForDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
+                  <p className="text-slate-600">{selectedProjectForDetail.description}</p>
+                  {selectedProjectForDetail.address && (
+                    <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
+                      <MapPin className="w-4 h-4" />
+                      {selectedProjectForDetail.address}
+                    </p>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setShowProjectDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                 >
-                  {loading ? 'Adding...' : 'Add Supplier'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSupplierForm(false);
-                    setSupplierFormData({ name: '', contact: '', email: '', phone: '' });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
+                  <X className="w-6 h-6 text-slate-400" />
                 </button>
               </div>
-            </form>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {selectedProjectForDetail.items?.length || 0}
+                  </div>
+                  <div className="text-sm text-slate-600">Products</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {getProjectItemCount(selectedProjectForDetail)}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Items</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">
+                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Cost</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
+                  {selectedProjectForDetail.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-slate-800">{item.name}</h4>
+                        <p className="text-sm text-slate-500">{item.description}</p>
+                        {item.partNumber && (
+                          <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
+                        )}
+                        {item.fromPack && (
+                          <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
+                          <div className="text-sm text-slate-500">x{item.quantity}</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <button
+                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
+                  <p className="text-slate-500">Add products from the Product Library to get started</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
+                  {selectedProjectForDetail.lastModified && (
+                    <span className="ml-4">
+                      Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => exportToPDF(selectedProjectForDetail)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={() => setCurrentProject(selectedProjectForDetail)}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    Set Active
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pack Detail Modal */}
+      {showPackDetail && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
+                  <p className="text-slate-600">{selectedPack.description}</p>
+                  {selectedPack.category && (
+                    <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-md text-sm font-medium mt-2">
+                      {selectedPack.category}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setShowPackDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {selectedPack.products?.length || 0}
+                  </div>
+                  <div className="text-sm text-slate-600">Products in Pack</div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    ${selectedPack.products?.reduce((sum, p) => sum + (p.price * p.quantity), 0).toFixed(2) || '0.00'}
+                  </div>
+                  <div className="text-sm text-slate-600">Total Value</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {selectedPack.products && selectedPack.products.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
+                  {selectedPack.products.map((product, index) => (
+                    <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                          {product.image ? (
+                            <img 
+                              src={product.image} 
+                              alt={product.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-slate-800">{product.name}</h4>
+                          {product.partNumber && (
+                            <p className="text-xs text-slate-500">Part: {product.partNumber}</p>
+                          )}
+                          <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updatePackProductQuantity(selectedPack, index, Math.max(1, product.quantity - 1))}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-8 text-center font-medium">{product.quantity}</span>
+                          <button
+                            onClick={() => updatePackProductQuantity(selectedPack, index, product.quantity + 1)}
+                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeProductFromPack(selectedPack, index)}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No products in pack</h3>
+                  <p className="text-slate-500">Edit this pack to add products</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Created: {new Date(selectedPack.createdAt).toLocaleDateString()}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addPackToEstimate(selectedPack)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add to Estimate
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingPack(selectedPack);
+                      setPackFormData({
+                        name: selectedPack.name,
+                        description: selectedPack.description || '',
+                        category: selectedPack.category || '',
+                        products: selectedPack.products || [],
+                        image: selectedPack.image || null
+                      });
+                      setShowPackDetail(false);
+                      setShowPackForm(true);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Pack
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
+      {showProductDetail && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      {selectedProduct.image ? (
+                        <img 
+                          src={selectedProduct.image} 
+                          alt={selectedProduct.name}
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      ) : (
+                        <Package className="w-8 h-8 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl font-bold text-slate-800 mb-1">{selectedProduct.name}</h2>
+                      {selectedProduct.partNumber && (
+                        <p className="text-sm text-slate-500 mb-2">Part: {selectedProduct.partNumber}</p>
+                      )}
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-3xl font-bold text-blue-600">
+                          ${Number(selectedProduct.price).toFixed(2)}
+                        </span>
+                        <span className="text-slate-500">per {selectedProduct.unit || 'each'}</span>
+                      </div>
+                      {selectedProduct.isAutoExtracted && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Auto-extracted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowProductDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="space-y-6">
+                {/* Description */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-2">Description</h3>
+                  <p className="text-slate-600 leading-relaxed">
+                    {selectedProduct.description || 'No description available for this product.'}
+                  </p>
+                </div>
+
+                {/* Product Details */}
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-3">Product Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Category</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.category || 'Uncategorized'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Supplier</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.supplier || 'No supplier'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Unit</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.unit || 'each'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <div className="text-sm text-slate-500">Part Number</div>
+                      <div className="font-medium text-slate-800">
+                        {selectedProduct.partNumber || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Product Link */}
+                {selectedProduct.link && (
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-2">Product Link</h3>
+                    <button
+                      onClick={() => window.open(selectedProduct.link, '_blank')}
+                      className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View on supplier website
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  {selectedProduct.createdAt && (
+                    <span>Added: {new Date(selectedProduct.createdAt).toLocaleDateString()}</span>
+                  )}
+                  {selectedProduct.updatedAt && selectedProduct.createdAt !== selectedProduct.updatedAt && (
+                    <span className="ml-4">Updated: {new Date(selectedProduct.updatedAt).toLocaleDateString()}</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingProduct(selectedProduct);
+                      setProductFormData({
+                        name: selectedProduct.name,
+                        price: selectedProduct.price.toString(),
+                        description: selectedProduct.description || '',
+                        category: selectedProduct.category || '',
+                        supplier: selectedProduct.supplier || '',
+                        link: selectedProduct.link || '',
+                        unit: selectedProduct.unit || 'each',
+                        partNumber: selectedProduct.partNumber || '',
+                        isAutoExtracted: selectedProduct.isAutoExtracted || false,
+                        image: selectedProduct.image || null
+                      });
+                      setShowProductDetail(false);
+                      setShowProductForm(true);
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Edit Product
+                  </button>
+                  <button
+                    onClick={() => {
+                      addProductToEstimate(selectedProduct);
+                      setShowProductDetail(false);
+                    }}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add to Estimate
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Detail Modal */}
+      {showSupplierDetail && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">{selectedSupplier.name}</h2>
+                  <p className="text-slate-600">Supplier Information</p>
+                </div>
+                <button 
+                  onClick={() => setShowSupplierDetail(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                {selectedSupplier.contact && (
+                  <div className="flex items-center gap-3">
+                    <User className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="text-sm text-slate-500">Contact Person</div>
+                      <div className="font-medium text-slate-800">{selectedSupplier.contact}</div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSupplier.email && (
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="text-sm text-slate-500">Email</div>
+                      <button
+                        onClick={() => handleEmailClick(selectedSupplier.email)}
+                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        {selectedSupplier.email}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSupplier.phone && (
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="text-sm text-slate-500">Phone</div>
+                      <button
+                        onClick={() => handlePhoneClick(selectedSupplier.phone, selectedSupplier.extension)}
+                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        {selectedSupplier.phone}
+                        {selectedSupplier.extension && ` ext. ${selectedSupplier.extension}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSupplier.createdAt && (
+                  <div className="pt-4 border-t border-slate-200">
+                    <div className="text-sm text-slate-500">
+                      Added: {new Date(selectedSupplier.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setEditingSupplier(selectedSupplier);
+                    setSupplierFormData({
+                      name: selectedSupplier.name,
+                      contact: selectedSupplier.contact || '',
+                      email: selectedSupplier.email || '',
+                      phone: selectedSupplier.phone || '',
+                      extension: selectedSupplier.extension || ''
+                    });
+                    setShowSupplierDetail(false);
+                    setShowSupplierForm(true);
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit Supplier
+                </button>
+                <button
+                  onClick={() => setShowSupplierDetail(false)}
+                  className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2659,5 +3095,4 @@ Generated by ECP Assistant`;
   );
 };
 
-export default App;
-      
+export default App;      
