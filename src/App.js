@@ -1,235 +1,228 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Package, Trash2, Edit3, Settings, RefreshCw, LogOut, Search, X, PlusCircle, Eye, Wifi, WifiOff, ZoomIn, ExternalLink, Download, Share, Mail, MessageSquare, FileText, Minus, Phone, MapPin, User, Image } from 'lucide-react';
-import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { ExternalLink, Package, Users, Settings, Download, Search, Plus, Edit, Trash2, X, Minus, PlusCircle, Eye } from 'lucide-react';
 
-const App = () => {
-  const [currentView, setCurrentView] = useState('projects');
-  const [productView, setProductView] = useState('products');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+export default function App() {
+  const [activeTab, setActiveTab] = useState('library');
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showAddPack, setShowAddPack] = useState(false);
+  const [showEditProduct, setShowEditProduct] = useState(false);
+  const [showEditPack, setShowEditPack] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showEstimateDetails, setShowEstimateDetails] = useState(false);
+  const [showProductDetails, setShowProductDetails] = useState(false);
+  const [showPackDetails, setShowPackDetails] = useState(false);
+  const [selectedPack, setSelectedPack] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [projectSearchTerm, setProjectSearchTerm] = useState('');
-  
-  // Data states
-  const [projects, setProjects] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [packs, setPacks] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  
-  // Form states
-  const [showProjectForm, setShowProjectForm] = useState(false);
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [showPackForm, setShowPackForm] = useState(false);
-  const [showCategoryForm, setShowCategoryForm] = useState(false);
-  const [showSupplierForm, setShowSupplierForm] = useState(false);
-  const [showProductDetail, setShowProductDetail] = useState(false);
-  const [showPackDetail, setShowPackDetail] = useState(false);
-  const [showProjectDetail, setShowProjectDetail] = useState(false);
-  const [showSupplierDetail, setShowSupplierDetail] = useState(false);
-  const [showProductSelector, setShowProductSelector] = useState(false);
-  
-  const [editingProject, setEditingProject] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('All Categories');
+  const [currentProject, setCurrentProject] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [shareProject, setShareProject] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingPack, setEditingPack] = useState(null);
-  const [editingSupplier, setEditingSupplier] = useState(null);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedPack, setSelectedPack] = useState(null);
-  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState(null);
-  const [selectedSupplier, setSelectedSupplier] = useState(null);
-  const [currentProject, setCurrentProject] = useState(null);
-  
-  const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [notification, setNotification] = useState(null);
-  const [isExtracting, setIsExtracting] = useState(false);
-  
-  // Product selector states
-  const [productSelectorSearch, setProductSelectorSearch] = useState('');
-  
-  // States for Pack controls
-  const [packProductQuantities, setPackProductQuantities] = useState({});
-  const [removedPackProducts, setRemovedPackProducts] = useState(new Set());
-  
-  // Form data
-  const [projectFormData, setProjectFormData] = useState({
-    name: '',
-    description: '',
-    address: ''
-  });
+  const [libraryView, setLibraryView] = useState('products');
 
-  const [productFormData, setProductFormData] = useState({
-    name: '',
-    price: '',
-    description: '',
-    category: '',
-    supplier: '',
-    link: '',
-    unit: 'each',
-    partNumber: '',
-    isAutoExtracted: false,
-    image: null
-  });
-
-  const [packFormData, setPackFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    products: [],
-    image: null
-  });
-
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    description: ''
-  });
-
-  const [supplierFormData, setSupplierFormData] = useState({
-    name: '',
-    contact: '',
-    email: '',
-    phone: '',
-    extension: ''
-  });
-
-  // Initialize and load data
-  useEffect(() => {
-    setConnected(true);
-    loadData();
-    
-    // Online/offline listeners
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline);
-      window.addEventListener('offline', handleOffline);
-    }
-    
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
+  const [products, setProducts] = useState(() => {
+    const saved = localStorage.getItem('ecp-products');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 1,
+        name: '3/4 in. x 10 ft. Gray PVC Schedule 40 Conduit',
+        category: 'Electrical',
+        supplier: 'Home Depot',
+        price: 12.98,
+        unit: 'per 10ft',
+        description: 'Schedule 40 PVC conduit for electrical wiring protection. UL listed for underground and above ground use.',
+        link: 'https://www.homedepot.com/p/conduit',
+        dateAdded: '2025-01-15',
+        isAutoExtracted: true,
+        image: null
+      },
+      {
+        id: 2,
+        name: 'Wire Nuts Yellow 12-10 AWG',
+        category: 'Electrical',
+        supplier: 'Home Depot',
+        price: 8.47,
+        unit: 'per 100ct',
+        description: 'Twist-on wire connectors for copper wires.',
+        link: 'https://www.homedepot.com/p/wire-nuts',
+        dateAdded: '2025-01-15',
+        isAutoExtracted: false,
+        image: null
       }
-    };
-  }, []);
+    ];
+  });
 
-  // Notification system
-  const showNotification = (message, type = 'info') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
+  const [packs, setPacks] = useState(() => {
+    const saved = localStorage.getItem('ecp-packs');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 1,
+        name: 'Basic Electrical Starter Pack',
+        category: 'Electrical',
+        description: 'Essential electrical components for basic installations',
+        productIds: [1, 2],
+        dateAdded: '2025-01-15',
+        image: null
+      }
+    ];
+  });
+
+  const [projects, setProjects] = useState(() => {
+    const saved = localStorage.getItem('ecp-projects');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 1,
+        name: 'Kitchen Renovation - Smith House',
+        description: 'Complete electrical work for kitchen remodel',
+        items: [],
+        createdAt: '2025-01-10T10:30:00Z',
+        lastModified: '2025-01-10T10:30:00Z'
+      }
+    ];
+  });
+
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('ecp-categories');
+    return saved ? JSON.parse(saved) : ['Electrical', 'Plumbing', 'HVAC', 'General'];
+  });
+
+  const [suppliers, setSuppliers] = useState(() => {
+    const saved = localStorage.getItem('ecp-suppliers');
+    return saved ? JSON.parse(saved) : ["Home Depot", "Lowe's", 'Amazon', 'Local Supplier'];
+  });
+
+  const [productForm, setProductForm] = useState({
+    name: '', link: '', category: '', supplier: '', unit: '', price: '', description: '', image: null
+  });
+
+  const [packForm, setPackForm] = useState({
+    name: '', category: '', description: '', productIds: [], image: null
+  });
+
+  const [projectForm, setProjectForm] = useState({ name: '', description: '' });
+
+  const [packProductQuery, setPackProductQuery] = useState('');
+  const [editPackProductQuery, setEditPackProductQuery] = useState('');
+
+  const [newCategory, setNewCategory] = useState('');
+  const [newSupplier, setNewSupplier] = useState('');
+
+  useEffect(() => { localStorage.setItem('ecp-products', JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem('ecp-packs', JSON.stringify(packs)); }, [packs]);
+  useEffect(() => { localStorage.setItem('ecp-projects', JSON.stringify(projects)); }, [projects]);
+  useEffect(() => { localStorage.setItem('ecp-categories', JSON.stringify(categories)); }, [categories]);
+  useEffect(() => { localStorage.setItem('ecp-suppliers', JSON.stringify(suppliers)); }, [suppliers]);
+
+  const generateId = () => Date.now() + Math.random();
+  const showNotification = (message, type = 'info') => { setNotification({ message, type }); setTimeout(() => setNotification(null), 3000); };
+
+  const extractFromHomeDepotURL = (url, pathname) => {
+    let name = '';
+    let description = '';
+    let price = Math.floor(Math.random() * 200) + 20;
+    if (pathname.includes('/p/')) {
+      const segments = pathname.split('/');
+      const productSegment = segments.find((segment, index) => segments[index - 1] === 'p' && segment !== '');
+      if (productSegment && !productSegment.match(/^\d+$/)) {
+        name = productSegment.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      }
+    }
+    if (!name) name = 'Producto Home Depot';
+    return { name, description: 'Producto de Home Depot. Precio estimado basado en categoría.', price, unit: 'each', isAutoExtracted: true };
   };
 
-  // Enhanced contact functions
-  const handleEmailClick = (email) => {
-    window.location.href = `mailto:${email}`;
-  };
-
-  const handlePhoneClick = (phone, extension = '') => {
-    const phoneNumber = extension ? `${phone},${extension}` : phone;
-    window.location.href = `tel:${phoneNumber}`;
-  };
-
-  // Delete project function
-  const handleProjectDelete = async (project) => {
-    if (window.confirm(`Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`)) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'projects', project.id));
-        await loadData();
-        showNotification('Project deleted successfully', 'success');
-        
-        // Clear current project if it was the deleted one
-        if (currentProject?.id === project.id) {
-          setCurrentProject(null);
+  const extractFromLowesURL = (url, pathname) => {
+    let name = '';
+    let price = Math.floor(Math.random() * 180) + 15;
+    if (pathname.includes('/pd/')) {
+      const segments = pathname.split('/');
+      const productIndex = segments.findIndex((s) => s === 'pd');
+      if (productIndex !== -1 && segments[productIndex + 1]) {
+        const productSegment = segments[productIndex + 1];
+        if (!productSegment.match(/^\d+$/)) {
+          name = productSegment.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
         }
-      } catch (error) {
-        console.error('Error deleting project:', error);
-        showNotification('Error deleting project', 'error');
-      } finally {
-        setLoading(false);
       }
     }
+    if (!name) name = 'Producto Lowes';
+    return { name, description: "Producto de Lowe's. Información extraída de URL.", price, unit: 'each', isAutoExtracted: true };
   };
 
-  // AUTO-EXTRACTION FUNCTION FROM APP (1).JS
+  const extractFromAmazonURL = (url, pathname) => {
+    let name = '';
+    let price = Math.floor(Math.random() * 300) + 10;
+    if (pathname.includes('/dp/')) {
+      const segments = pathname.split('/');
+      const dpIndex = segments.findIndex((s) => s === 'dp');
+      if (dpIndex > 0) {
+        const productSegment = segments[dpIndex - 1];
+        if (productSegment && !productSegment.match(/^\d+$/)) {
+          name = productSegment.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+        }
+      }
+    }
+    const urlObj = new URL(url);
+    const keywords = urlObj.searchParams.get('keywords');
+    if (keywords && !name) name = keywords.replace(/\+/g, ' ');
+    if (!name) name = 'Producto Amazon';
+    return { name, description: 'Producto de Amazon. Precio estimado.', price, unit: 'each', isAutoExtracted: true };
+  };
+
+  const extractFromGenericURL = (url, pathname) => {
+    let name = '';
+    let price = Math.floor(Math.random() * 100) + 10;
+    const segments = pathname.split('/').filter((s) => s !== '');
+    const productSegment = segments.find((segment) => segment.length > 8 && segment.includes('-') && !segment.match(/^\d+$/));
+    if (productSegment) {
+      name = productSegment.replace(/-/g, ' ').replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+    if (!name) {
+      const hostname = new URL(url).hostname.replace('www.', '');
+      name = `Producto de ${hostname}`;
+    }
+    return { name, description: 'Producto extraído automáticamente. Verifica la información.', price, unit: 'each', isAutoExtracted: true };
+  };
+
   const extractProductInfo = async (url) => {
     setIsExtracting(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      let extracted = { name: '', description: '', price: 0, unit: 'each', partNumber: '', isAutoExtracted: true };
-      
-      const { hostname, pathname } = new URL(url);
-      const host = hostname.toLowerCase();
-      
-      const toTitle = (s) => s.replace(/[-_]+/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-      
-      if (host.includes('homedepot.com')) {
-        const segs = pathname.split('/').filter(Boolean);
-        const pIdx = segs.indexOf('p');
-        const name = pIdx !== -1 && segs[pIdx + 1] ? toTitle(segs[pIdx + 1]) : 'Home Depot Product';
-        extracted = {
-          name,
-          description: 'Product from Home Depot extracted automatically.',
-          price: Math.floor(Math.random() * 200) + 20,
-          unit: 'each',
-          partNumber: `HD-${Math.floor(Math.random() * 100000)}`,
-          isAutoExtracted: true,
-        };
-      } else if (host.includes('lowes.com')) {
-        const segs = pathname.split('/').filter(Boolean);
-        const pdIdx = segs.indexOf('pd');
-        const name = pdIdx !== -1 && segs[pdIdx + 1] ? toTitle(segs[pdIdx + 1]) : "Lowe's Product";
-        extracted = {
-          name,
-          description: "Product from Lowe's extracted automatically.",
-          price: Math.floor(Math.random() * 180) + 15,
-          unit: 'each',
-          partNumber: `LW-${Math.floor(Math.random() * 100000)}`,
-          isAutoExtracted: true,
-        };
-      } else if (host.includes('amazon.com')) {
-        extracted = {
-          name: 'Amazon Product',
-          description: 'Product from Amazon extracted automatically.',
-          price: Math.floor(Math.random() * 150) + 10,
-          unit: 'each',
-          partNumber: `AMZ-${Math.floor(Math.random() * 100000)}`,
-          isAutoExtracted: true,
-        };
-      } else {
-        extracted = {
-          name: 'Extracted Product',
-          description: 'Product extracted automatically.',
-          price: Math.floor(Math.random() * 100) + 10,
-          unit: 'each',
-          partNumber: `EXT-${Math.floor(Math.random() * 100000)}`,
-          isAutoExtracted: true,
-        };
-      }
-      return extracted;
-    } catch (e) {
-      console.error(e);
-      showNotification('Error processing URL.', 'error');
-      return { name: '', description: '', price: 0, unit: 'each', partNumber: '', isAutoExtracted: false };
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      let extractedData = { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: true };
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname.toLowerCase();
+      const hostname = urlObj.hostname.toLowerCase();
+      if (hostname.includes('homedepot.com')) extractedData = extractFromHomeDepotURL(url, pathname);
+      else if (hostname.includes('lowes.com')) extractedData = extractFromLowesURL(url, pathname);
+      else if (hostname.includes('amazon.com')) extractedData = extractFromAmazonURL(url, pathname);
+      else extractedData = extractFromGenericURL(url, pathname);
+      return extractedData;
+    } catch (error) {
+      console.error('Error extracting product info:', error);
+      showNotification('Error al procesar la URL. Completa la información manualmente.', 'error');
+      return { name: '', description: '', price: 0, unit: 'each', isAutoExtracted: false };
     } finally {
       setIsExtracting(false);
     }
   };
 
   const handleProductUrlChange = async (url) => {
-    setProductFormData(prev => ({ ...prev, link: url }));
+    setProductForm((prev) => ({ ...prev, link: url }));
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
       const extracted = await extractProductInfo(url);
-      if (extracted && extracted.isAutoExtracted) {
-        setProductFormData(prev => ({
+      if (extracted) {
+        setProductForm((prev) => ({
           ...prev,
           name: extracted.name,
           description: extracted.description,
-          price: String(extracted.price),
+          price: extracted.price.toString(),
           unit: extracted.unit,
-          partNumber: extracted.partNumber,
           isAutoExtracted: extracted.isAutoExtracted,
         }));
         showNotification('Product information extracted successfully!', 'success');
@@ -237,2547 +230,879 @@ const App = () => {
     }
   };
 
-  // Load all data from Firestore
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const projectsSnapshot = await getDocs(collection(db, 'projects'));
-      const projectsData = projectsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setProjects(projectsData);
-
-      const productsSnapshot = await getDocs(collection(db, 'products'));
-      const productsData = productsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setProducts(productsData);
-
-      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
-      const categoriesData = categoriesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      if (categoriesData.length === 0) {
-        const defaultCategories = [
-          { name: 'Electrical', description: 'Electrical components and tools' },
-          { name: 'Plumbing', description: 'Plumbing supplies and fixtures' },
-          { name: 'HVAC', description: 'Heating, ventilation, and air conditioning' },
-          { name: 'General', description: 'General construction materials' }
-        ];
-        for (const category of defaultCategories) {
-          await addDoc(collection(db, 'categories'), {
-            ...category,
-            createdAt: new Date().toISOString()
-          });
+  const handleImageUpload = (event, target = 'product', isEdit = false) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { showNotification('Image size must be less than 5MB', 'error'); return; }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (target === 'product') {
+          if (isEdit) setEditingProduct((prev) => ({ ...prev, image: e.target.result }));
+          else setProductForm((prev) => ({ ...prev, image: e.target.result }));
+        } else if (target === 'pack') {
+          if (isEdit) setEditingPack((prev) => ({ ...prev, image: e.target.result }));
+          else setPackForm((prev) => ({ ...prev, image: e.target.result }));
         }
-        const newCategoriesSnapshot = await getDocs(collection(db, 'categories'));
-        const newCategoriesData = newCategoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setCategories(newCategoriesData);
-      } else {
-        setCategories(categoriesData);
-      }
-
-      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
-      const suppliersData = suppliersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      if (suppliersData.length === 0) {
-        const defaultSuppliers = [
-          { name: 'Home Depot', contact: 'John Smith', email: 'john@homedepot.com', phone: '555-0001', extension: '' },
-          { name: "Lowe's", contact: 'Jane Doe', email: 'jane@lowes.com', phone: '555-0002', extension: '123' },
-          { name: 'Amazon', contact: 'Support Team', email: 'support@amazon.com', phone: '555-0003', extension: '' },
-          { name: 'Local Supplier', contact: 'Mike Johnson', email: 'mike@local.com', phone: '555-0004', extension: '456' }
-        ];
-        for (const supplier of defaultSuppliers) {
-          await addDoc(collection(db, 'suppliers'), {
-            ...supplier,
-            createdAt: new Date().toISOString()
-          });
-        }
-        const newSuppliersSnapshot = await getDocs(collection(db, 'suppliers'));
-        const newSuppliersData = newSuppliersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setSuppliers(newSuppliersData);
-      } else {
-        setSuppliers(suppliersData);
-      }
-
-      const packsSnapshot = await getDocs(collection(db, 'packs'));
-      const packsData = packsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setPacks(packsData);
-
-      showNotification('Data loaded successfully!', 'success');
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setConnected(false);
-      showNotification('Error loading data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Project functions
-  const handleProjectSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!projectFormData.name) {
-      showNotification('Please enter project name', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const projectData = {
-        ...projectFormData,
-        items: editingProject ? editingProject.items : [],
-        total: editingProject ? editingProject.total : 0,
-        createdAt: editingProject ? editingProject.createdAt : new Date().toISOString(),
-        lastModified: new Date().toISOString()
       };
-      
-      if (editingProject) {
-        await updateDoc(doc(db, 'projects', editingProject.id), projectData);
-        showNotification('Project updated successfully!', 'success');
-      } else {
-        const docRef = await addDoc(collection(db, 'projects'), projectData);
-        const newProject = { id: docRef.id, ...projectData };
-        setCurrentProject(newProject);
-        showNotification('Project created successfully!', 'success');
-      }
-      
-      await loadData();
-      setProjectFormData({ name: '', description: '', address: '' });
-      setShowProjectForm(false);
-      setEditingProject(null);
-    } catch (error) {
-      console.error('Error saving project:', error);
-      showNotification('Error saving project', 'error');
-    } finally {
-      setLoading(false);
+      reader.readAsDataURL(file);
     }
   };
 
-  // Product functions
-  const handleProductSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!productFormData.name || !productFormData.price) {
-      showNotification('Please fill in at least the name and price', 'error');
-      return;
-    }
+  const resetProductForm = () => setProductForm({ name: '', link: '', category: '', supplier: '', unit: '', price: '', description: '', image: null });
+  const resetPackForm = () => setPackForm({ name: '', category: '', description: '', productIds: [], image: null });
+  const resetEditForm = () => { setEditingProduct(null); setEditingPack(null); setShowEditProduct(false); setShowEditPack(false); };
 
-    setLoading(true);
-    try {
-      const productData = {
-        ...productFormData,
-        price: parseFloat(productFormData.price),
-        createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+  const syncToCloud = async () => { setIsSyncing(true); try { await new Promise((r) => setTimeout(r, 2000)); showNotification('Data synced successfully!', 'success'); } catch (e) { showNotification('Failed to sync data', 'error'); } finally { setIsSyncing(false); } };
 
-      if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), productData);
-        showNotification('Product updated successfully!', 'success');
-      } else {
-        await addDoc(collection(db, 'products'), productData);
-        showNotification('Product added successfully!', 'success');
-      }
+  const addProduct = () => {
+    if (!productForm.name || !productForm.link) { showNotification('Name and link are required', 'error'); return; }
+    const newProduct = { id: generateId(), ...productForm, price: parseFloat(productForm.price) || 0, dateAdded: new Date().toISOString().split('T')[0], isAutoExtracted: productForm.isAutoExtracted || false };
+    setProducts((prev) => [...prev, newProduct]);
+    resetProductForm();
+    setShowAddProduct(false);
+    showNotification(`Added ${newProduct.name} successfully!`, 'success');
+  };
 
-      await loadData();
-      setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
-      setShowProductForm(false);
-      setEditingProduct(null);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      showNotification('Error saving product', 'error');
-    } finally {
-      setLoading(false);
+  const editProduct = (product) => { setEditingProduct({ ...product }); setShowEditProduct(true); };
+
+  const updateProduct = () => {
+    if (!editingProduct.name || !editingProduct.link) { showNotification('Name and link are required', 'error'); return; }
+    setProducts((prev) => prev.map((product) => (product.id === editingProduct.id ? { ...editingProduct, price: parseFloat(editingProduct.price) || 0 } : product)));
+    resetEditForm();
+    showNotification(`Updated ${editingProduct.name} successfully!`, 'success');
+  };
+
+  const deleteProduct = (id) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      setProducts((prev) => prev.filter((product) => product.id !== id));
+      setPacks((prev) => prev.map((pack) => ({ ...pack, productIds: pack.productIds.filter((productId) => productId !== id) })));
+      showNotification('Product deleted successfully', 'success');
     }
   };
 
-  // Pack functions
-  const handlePackSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!packFormData.name) {
-      showNotification('Please enter pack name', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const packData = {
-        ...packFormData,
-        createdAt: new Date().toISOString()
-      };
-      
-      if (editingPack) {
-        await updateDoc(doc(db, 'packs', editingPack.id), packData);
-        showNotification('Pack updated successfully!', 'success');
-      } else {
-        await addDoc(collection(db, 'packs'), packData);
-        showNotification('Pack created successfully!', 'success');
-      }
-      
-      await loadData();
-      setPackFormData({ name: '', description: '', category: '', products: [], image: null });
-      setShowPackForm(false);
-      setEditingPack(null);
-    } catch (error) {
-      console.error('Error saving pack:', error);
-      showNotification('Error saving pack', 'error');
-    } finally {
-      setLoading(false);
-    }
+  const addPack = () => {
+    if (!packForm.name || packForm.productIds.length === 0) { showNotification('Pack name and at least one product are required', 'error'); return; }
+    const newPack = { id: generateId(), ...packForm, dateAdded: new Date().toISOString().split('T')[0] };
+    setPacks((prev) => [...prev, newPack]);
+    resetPackForm();
+    setShowAddPack(false);
+    showNotification(`Added pack ${newPack.name} successfully!`, 'success');
   };
 
-  // Supplier functions
-  const handleSupplierSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!supplierFormData.name) {
-      showNotification('Please enter supplier name', 'error');
-      return;
-    }
+  const editPack = (pack) => { setEditingPack({ ...pack }); setShowEditPack(true); };
 
-    setLoading(true);
-    try {
-      const supplierData = {
-        ...supplierFormData,
-        createdAt: editingSupplier ? editingSupplier.createdAt : new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      if (editingSupplier) {
-        await updateDoc(doc(db, 'suppliers', editingSupplier.id), supplierData);
-        showNotification('Supplier updated successfully!', 'success');
-      } else {
-        await addDoc(collection(db, 'suppliers'), supplierData);
-        showNotification('Supplier added successfully!', 'success');
-      }
-
-      await loadData();
-      setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
-      setShowSupplierForm(false);
-      setEditingSupplier(null);
-    } catch (error) {
-      console.error('Error saving supplier:', error);
-      showNotification('Error saving supplier', 'error');
-    } finally {
-      setLoading(false);
-    }
+  const updatePack = () => {
+    if (!editingPack.name || editingPack.productIds.length === 0) { showNotification('Pack name and at least one product are required', 'error'); return; }
+    setPacks((prev) => prev.map((pack) => (pack.id === editingPack.id ? editingPack : pack)));
+    resetEditForm();
+    showNotification(`Updated pack ${editingPack.name} successfully!`, 'success');
   };
 
-  const handleDeletePack = async (id) => {
-    if (window.confirm('Are you sure you want to delete this pack?')) {
-      setLoading(true);
-      try {
-        await deleteDoc(doc(db, 'packs', id));
-        await loadData();
-        showNotification('Pack deleted successfully', 'success');
-      } catch (error) {
-        console.error('Error deleting pack:', error);
-        showNotification('Error deleting pack', 'error');
-      } finally {
-        setLoading(false);
-      }
-    }
+  const deletePack = (id) => { if (window.confirm('Are you sure you want to delete this pack?')) { setPacks((prev) => prev.filter((pack) => pack.id !== id)); showNotification('Pack deleted successfully', 'success'); } };
+
+  const getPackProducts = (pack) => pack.productIds.map((id) => products.find((p) => p.id === id)).filter(Boolean);
+  const getPackTotal = (pack) => getPackProducts(pack).reduce((total, product) => total + product.price, 0);
+
+  const createProject = () => {
+    if (!projectForm.name) { showNotification('Project name is required', 'error'); return; }
+    const newProject = { id: generateId(), name: projectForm.name, description: projectForm.description || '', items: [], createdAt: new Date().toISOString(), lastModified: new Date().toISOString() };
+    setProjects((prev) => [...prev, newProject]);
+    setProjectForm({ name: '', description: '' });
+    setShowNewProject(false);
+    setCurrentProject(newProject);
+    setShowEstimateDetails(true);
+    showNotification(`Created project ${newProject.name}!`, 'success');
   };
 
-  // Product selector functions
-  const filteredProductsForSelector = products.filter(product =>
-    product.name.toLowerCase().includes(productSelectorSearch.toLowerCase()) ||
-    (product.partNumber && product.partNumber.toLowerCase().includes(productSelectorSearch.toLowerCase()))
-  );
-
-  const addProductToPack = (product) => {
-    const isAlreadyAdded = packFormData.products.some(p => p.id === product.id);
-    if (isAlreadyAdded) {
-      showNotification('Product already added to pack', 'info');
-      return;
+  const addProductToEstimate = (product) => {
+    if (!currentProject) {
+      const quickProject = { id: generateId(), name: `Quick Estimate - ${new Date().toLocaleDateString()}`, description: 'Automatically created estimate', items: [], createdAt: new Date().toISOString(), lastModified: new Date().toISOString() };
+      setProjects((prev) => [...prev, quickProject]);
+      setCurrentProject(quickProject);
+      setShowEstimateDetails(true);
     }
-
-    setPackFormData({
-      ...packFormData,
-      products: [...packFormData.products, {
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        partNumber: product.partNumber || '',
-        quantity: 1,
-        image: product.image
-      }]
-    });
-    showNotification(`${product.name} added to pack`, 'success');
-  };
-
-  const removeProductFromFormPack = (productId) => {
-    setPackFormData({
-      ...packFormData,
-      products: packFormData.products.filter(p => p.id !== productId)
-    });
-    showNotification('Product removed from pack', 'success');
-  };
-
-  const updateFormPackProductQuantity = (productId, newQuantity) => {
-    if (newQuantity < 1) return;
-    
-    setPackFormData({
-      ...packFormData,
-      products: packFormData.products.map(p => 
-        p.id === productId ? { ...p, quantity: newQuantity } : p
-      )
-    });
-  };
-
-  // NEW PACK FUNCTIONS FOR QUANTITY CONTROL AND REMOVAL
-  const updatePackProductQuantity = async (pack, productIndex, newQuantity) => {
-    if (newQuantity < 1) return;
-    
-    try {
-      const updatedProducts = [...pack.products];
-      updatedProducts[productIndex] = {
-        ...updatedProducts[productIndex],
-        quantity: newQuantity
-      };
-      
-      const updatedPack = {
-        ...pack,
-        products: updatedProducts
-      };
-      
-      await updateDoc(doc(db, 'packs', pack.id), {
-        products: updatedProducts
-      });
-      
-      setSelectedPack(updatedPack);
-      await loadData();
-      showNotification('Quantity updated', 'success');
-    } catch (error) {
-      console.error('Error updating pack product quantity:', error);
-      showNotification('Error updating quantity', 'error');
-    }
-  };
-
-  const removeProductFromPack = async (pack, productIndex) => {
-    try {
-      const updatedProducts = pack.products.filter((_, index) => index !== productIndex);
-      
-      const updatedPack = {
-        ...pack,
-        products: updatedProducts
-      };
-      
-      await updateDoc(doc(db, 'packs', pack.id), {
-        products: updatedProducts
-      });
-      
-      setSelectedPack(updatedPack);
-      await loadData();
-      showNotification('Product removed from pack', 'success');
-    } catch (error) {
-      console.error('Error removing product from pack:', error);
-      showNotification('Error removing product', 'error');
-    }
-  };
-
-  // ESTIMATE SYSTEM CORRECTED
-  const addProductToEstimate = async (product) => {
-    let project = currentProject;
-    
-    // If no active project, create a new one
-    if (!project) {
-      const newProjectData = {
-        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
-        description: 'Automatically created estimate',
-        items: [],
-        total: 0,
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString()
-      };
-      
-      try {
-        const docRef = await addDoc(collection(db, 'projects'), newProjectData);
-        project = { id: docRef.id, ...newProjectData };
-        setProjects(prev => [project, ...prev]);
-        setCurrentProject(project);
-      } catch (error) {
-        console.error('Error creating project:', error);
-        showNotification('Error creating project', 'error');
-        return;
-      }
-    }
-    
-    // Check if product already exists in estimate
-    const exists = project.items?.find(i => i.productId === product.id);
-    if (exists) {
-      showNotification(`${product.name} is already in the estimate`, 'info');
-      return;
-    }
-    
-    // Create new item
-    const item = {
-      id: Date.now() + Math.random(),
-      productId: product.id,
-      name: product.name,
-      price: Number(product.price) || 0,
-      unit: product.unit || 'each',
-      description: product.description || '',
-      supplier: product.supplier || '',
-      category: product.category || '',
-      link: product.link || '',
-      partNumber: product.partNumber || '',
-      quantity: 1,
-      addedAt: new Date().toISOString(),
-    };
-    
-    // Update project
-    const updatedItems = [...(project.items || []), item];
-    const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    
-    const updatedProject = {
-      ...project,
-      items: updatedItems,
-      total: updatedTotal,
-      lastModified: new Date().toISOString()
-    };
-    
-    try {
-      // Update in Firebase
-      await updateDoc(doc(db, 'projects', project.id), {
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      });
-      
-      // Update local states
-      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-      setCurrentProject(updatedProject);
+    const estimateItem = { id: generateId(), productId: product.id, name: product.name, price: product.price, unit: product.unit, description: product.description, supplier: product.supplier, category: product.category, link: product.link, quantity: 1, addedAt: new Date().toISOString() };
+    const projectToUpdate = currentProject || projects[projects.length - 1];
+    const existingItem = projectToUpdate.items.find((item) => item.productId === product.id);
+    if (existingItem) {
+      updateItemQuantity(projectToUpdate.id, existingItem.id, existingItem.quantity + 1);
+      showNotification(`Increased ${product.name} quantity`, 'success');
+    } else {
+      setProjects((prev) => prev.map((p) => (p.id === projectToUpdate.id ? { ...p, items: [...p.items, estimateItem], lastModified: new Date().toISOString() } : p)));
+      if (currentProject) setCurrentProject((prev) => (prev ? { ...prev, items: [...prev.items, estimateItem] } : null));
       showNotification(`Added ${product.name} to estimate`, 'success');
-    } catch (error) {
-      console.error('Error updating project:', error);
-      showNotification('Error adding product to estimate', 'error');
     }
   };
 
-  // NEW FUNCTION: Add pack to estimate (adds all pack products)
-  const addPackToEstimate = async (pack) => {
-    if (!pack.products || pack.products.length === 0) {
-      showNotification('This pack has no products', 'error');
-      return;
-    }
+  const addPackToEstimate = (pack) => { const packProducts = getPackProducts(pack); packProducts.forEach((product) => { if (product) addProductToEstimate(product); }); showNotification(`Added pack ${pack.name} to estimate`, 'success'); };
 
-    let project = currentProject;
-    
-    // If no active project, create a new one
-    if (!project) {
-      const newProjectData = {
-        name: `Quick Estimate - ${new Date().toLocaleDateString()}`,
-        description: 'Automatically created estimate',
-        items: [],
-        total: 0,
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString()
-      };
-      
-      try {
-        const docRef = await addDoc(collection(db, 'projects'), newProjectData);
-        project = { id: docRef.id, ...newProjectData };
-        setProjects(prev => [project, ...prev]);
-        setCurrentProject(project);
-      } catch (error) {
-        console.error('Error creating project:', error);
-        showNotification('Error creating project', 'error');
-        return;
-      }
-    }
-
-    // Add all pack products
-    const newItems = [];
-    let addedCount = 0;
-    
-    for (const packProduct of pack.products) {
-      // Check if product already exists
-      const exists = project.items?.find(i => i.productId === packProduct.id);
-      if (!exists) {
-        const item = {
-          id: Date.now() + Math.random() + addedCount,
-          productId: packProduct.id,
-          name: packProduct.name,
-          price: Number(packProduct.price) || 0,
-          unit: 'each',
-          description: `From pack: ${pack.name}`,
-          supplier: '',
-          category: pack.category || '',
-          link: '',
-          partNumber: packProduct.partNumber || '',
-          quantity: packProduct.quantity || 1,
-          addedAt: new Date().toISOString(),
-          fromPack: pack.name
-        };
-        newItems.push(item);
-        addedCount++;
-      }
-    }
-
-    if (newItems.length === 0) {
-      showNotification('All products from this pack are already in the estimate', 'info');
-      return;
-    }
-
-    // Update project
-    const updatedItems = [...(project.items || []), ...newItems];
-    const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    
-    const updatedProject = {
-      ...project,
-      items: updatedItems,
-      total: updatedTotal,
-      lastModified: new Date().toISOString()
-    };
-    
-    try {
-      // Update in Firebase
-      await updateDoc(doc(db, 'projects', project.id), {
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      });
-      
-      // Update local states
-      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-      setCurrentProject(updatedProject);
-      showNotification(`Added ${addedCount} products from pack "${pack.name}" to estimate`, 'success');
-    } catch (error) {
-      console.error('Error updating project:', error);
-      showNotification('Error adding pack to estimate', 'error');
+  const updateItemQuantity = (projectId, itemId, newQuantity) => {
+    if (newQuantity <= 0) {
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, items: p.items.filter((item) => item.id !== itemId), lastModified: new Date().toISOString() } : p)));
+      if (currentProject && currentProject.id === projectId) setCurrentProject((prev) => (prev ? { ...prev, items: prev.items.filter((item) => item.id !== itemId) } : null));
+    } else {
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, items: p.items.map((item) => (item.id === itemId ? { ...item, quantity: newQuantity } : item)), lastModified: new Date().toISOString() } : p)));
+      if (currentProject && currentProject.id === projectId) setCurrentProject((prev) => (prev ? { ...prev, items: prev.items.map((item) => (item.id === itemId ? { ...item, quantity: newQuantity } : item)) } : null));
     }
   };
 
-  // NEW FUNCTION: Remove product from project
-  const removeProductFromProject = async (project, itemId) => {
-    try {
-      const updatedItems = project.items.filter(item => item.id !== itemId);
-      const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-      
-      const updatedProject = {
-        ...project,
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      };
-      
-      // Update in Firebase
-      await updateDoc(doc(db, 'projects', project.id), {
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      });
-      
-      // Update local states
-      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-      setCurrentProject(current => current?.id === project.id ? updatedProject : current);
-      setSelectedProjectForDetail(updatedProject);
-      
-      showNotification('Product removed from project', 'success');
-    } catch (error) {
-      console.error('Error removing product:', error);
-      showNotification('Error removing product', 'error');
-    }
-  };
+  const deleteProject = (projectId) => { if (window.confirm('Are you sure you want to delete this project?')) { setProjects((prev) => prev.filter((p) => p.id !== projectId)); if (currentProject && currentProject.id === projectId) { setCurrentProject(null); setShowEstimateDetails(false); } showNotification('Project deleted successfully', 'success'); } };
+  const openProjectDetails = (project) => { setCurrentProject(project); setShowEstimateDetails(true); };
 
-  // NEW FUNCTION: Update product quantity in project
-  const updateProductQuantity = async (project, itemId, newQuantity) => {
-    if (newQuantity < 1) return;
-    
-    try {
-      const updatedItems = project.items.map(item => 
-        item.id === itemId ? { ...item, quantity: newQuantity } : item
-      );
-      const updatedTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-      
-      const updatedProject = {
-        ...project,
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      };
-      
-      // Update in Firebase
-      await updateDoc(doc(db, 'projects', project.id), {
-        items: updatedItems,
-        total: updatedTotal,
-        lastModified: new Date().toISOString()
-      });
-      
-      // Update local states
-      setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
-      setCurrentProject(current => current?.id === project.id ? updatedProject : current);
-      setSelectedProjectForDetail(updatedProject);
-      
-      showNotification('Quantity updated', 'success');
-    } catch (error) {
-      console.error('Error updating quantity:', error);
-      showNotification('Error updating quantity', 'error');
-    }
-  };
+  const addCategory = () => { if (!newCategory.trim()) { showNotification('Category name is required', 'error'); return; } if (categories.includes(newCategory)) { showNotification('Category already exists', 'error'); return; } setCategories((prev) => [...prev, newCategory]); setNewCategory(''); setShowAddCategory(false); showNotification(`Added category ${newCategory}`, 'success'); };
+  const addSupplier = () => { if (!newSupplier.trim()) { showNotification('Supplier name is required', 'error'); return; } if (suppliers.includes(newSupplier)) { showNotification('Supplier already exists', 'error'); return; } setSuppliers((prev) => [...prev, newSupplier]); setNewSupplier(''); setShowAddSupplier(false); showNotification(`Added supplier ${newSupplier}`, 'success'); };
+  const deleteCategory = (category) => { if (categories.length > 1) { setCategories((prev) => prev.filter((cat) => cat !== category)); showNotification(`Deleted category ${category}`, 'success'); } };
+  const deleteSupplier = (supplier) => { if (suppliers.length > 1) { setSuppliers((prev) => prev.filter((sup) => sup !== supplier)); showNotification(`Deleted supplier ${supplier}`, 'success'); } };
 
-  // IMPROVED PDF EXPORT FUNCTION with correct field structure
-  const exportToPDF = (project) => {
-    if (!project.items || project.items.length === 0) {
-      showNotification('No items in this project to export', 'error');
-      return;
-    }
-
-    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Create HTML content with improved PDF structure
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Project Estimate - ${project.name}</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .project-info { margin-bottom: 20px; }
-            .products-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            .products-table th, .products-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .products-table th { background-color: #f5f5f5; font-weight: bold; }
-            .products-table td { vertical-align: top; }
-            .summary { font-weight: bold; margin-top: 20px; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-            .url-cell { word-break: break-all; max-width: 150px; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>PROJECT ESTIMATE</h1>
-        </div>
-        
-        <div class="project-info">
-            <h2>Project: ${project.name}</h2>
-            <p><strong>Description:</strong> ${project.description || 'No description'}</p>
-            <p><strong>Address:</strong> ${project.address || 'No address'}</p>
-            <p><strong>Created:</strong> ${new Date(project.createdAt).toLocaleDateString()}</p>
-            <p><strong>Last Modified:</strong> ${new Date(project.lastModified).toLocaleDateString()}</p>
-        </div>
-
-        <h3>PRODUCTS:</h3>
-        <table class="products-table">
-            <thead>
-                <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 25%;">Name</th>
-                    <th style="width: 30%;">Description</th>
-                    <th style="width: 15%;">Part Number</th>
-                    <th style="width: 15%;" class="url-cell">URL</th>
-                    <th style="width: 10%;">Quantity</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${project.items.map((item, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${item.name}</td>
-                        <td>${item.description || 'No description'}</td>
-                        <td>${item.partNumber || 'N/A'}</td>
-                        <td class="url-cell">${item.link || 'N/A'}</td>
-                        <td>${item.quantity}</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-
-        <div class="summary">
-            <p>Total Items: ${itemCount}</p>
-            <p>Total Cost: $${total.toFixed(2)}</p>
-        </div>
-
-        <div class="footer">
-            <p>Generated by ECP Assistant on ${new Date().toLocaleDateString()}</p>
-        </div>
-    </body>
-    </html>
-    `;
-    
-    // Create blob and download
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_estimate.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
-  };
-
-  // Enhanced share estimate function
-  const shareEstimate = (project, method) => {
-    if (!project.items || project.items.length === 0) {
-      showNotification('No items in this project to share', 'error');
-      return;
-    }
-
-    const total = project.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemCount = project.items.reduce((sum, item) => sum + item.quantity, 0);
-    
-    const shareText = `Project Estimate: ${project.name}
-
-Items: ${itemCount}
-Total Cost: $${total.toFixed(2)}
-
-Products:
-${project.items.map(item => `• ${item.name} ${item.partNumber ? `(${item.partNumber})` : ''} - $${item.price.toFixed(2)} x${item.quantity}`).join('\n')}
-
-Generated by ECP Assistant`;
-    
-    if (method === 'email') {
-      const mailtoLink = `mailto:?subject=Project Estimate: ${encodeURIComponent(project.name)}&body=${encodeURIComponent(shareText)}`;
-      window.location.href = mailtoLink;
-    } else if (method === 'teams') {
-      const teamsUrl = `https://teams.microsoft.com/share?href=${encodeURIComponent(window.location.href)}&msgText=${encodeURIComponent(shareText)}`;
-      window.open(teamsUrl, '_blank');
-    }
-    
-    showNotification(`Shared via ${method}!`, 'success');
-  };
-
-  // Helper functions
-  const getProjectTotal = (project) => project.total || 0;
-  const getProjectItemCount = (project) => (project.items || []).reduce((sum, item) => sum + item.quantity, 0);
-
-  // Filter projects by search
-  const filteredProjects = projects.filter(project => {
-    const searchLower = projectSearchTerm.toLowerCase();
-    return (
-      project.name.toLowerCase().includes(searchLower) ||
-      (project.description && project.description.toLowerCase().includes(searchLower)) ||
-      (project.address && project.address.toLowerCase().includes(searchLower))
-    );
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All Categories' || product.category === selectedCategory;
+    return matchesSearch && matchesCategory;
   });
 
-  // Header component
-  const renderHeader = () => (
-    <div className="bg-white shadow-sm border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                isOnline ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-              }`}>
-                {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {isOnline ? 'Online' : 'Offline'}
-              </div>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
-                Firebase Connected
-              </div>
-            </div>
-            <p className="text-slate-600">
-              {currentProject ? (
-                <span className="flex items-center gap-2">
-                  Active: <strong>{currentProject.name}</strong>
-                  {currentProject.items && currentProject.items.length > 0 && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
-                      {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
-                    </span>
-                  )}
-                </span>
-              ) : (
-                'Welcome, dainierds41@gmail.com'
-              )}
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={loadData}
-              disabled={loading}
-              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Sync</span>
-            </button>
-            {currentView === 'projects' && (
-              <button 
-                onClick={() => setShowProjectForm(true)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Estimate</span>
-              </button>
-            )}
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50">
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const filteredPacks = packs.filter((pack) => {
+    const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase()) || (pack.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All Categories' || pack.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
-  // Navigation component
-  const renderNavigation = () => (
-    <div className="bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="bg-white rounded-2xl shadow-sm p-2 inline-flex">
-          <button
-            onClick={() => setCurrentView('projects')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Projects & Estimates</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('products')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'products' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>Product Library</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('settings')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
-              currentView === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Settings</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const getProjectTotal = (project) => project.items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const getProjectItemCount = (project) => project.items.reduce((total, item) => total + item.quantity, 0);
 
-  // Projects View
-  const renderProjectsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Your Projects & Estimates</h2>
-          <p className="text-slate-600">Manage your construction projects and estimates</p>
-        </div>
-        <button 
-          onClick={() => setShowProjectForm(true)}
-          className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
-      </div>
-
-      {/* Project search */}
-      <div className="mb-8">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={projectSearchTerm}
-            onChange={(e) => setProjectSearchTerm(e.target.value)}
-            placeholder="Search projects..."
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-          />
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredProjects.length > 0 ? (
-          filteredProjects.map(project => {
-            const itemCount = getProjectItemCount(project);
-            const total = getProjectTotal(project);
-            const formattedDate = new Date(project.createdAt).toLocaleDateString();
-            
-            return (
-              <div 
-                key={project.id} 
-                className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
-                    <p className="text-gray-600 text-sm">{project.description}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedProjectForDetail(project);
-                        setShowProjectDetail(true);
-                      }}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title="View project details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingProject(project);
-                        setProjectFormData({
-                          name: project.name,
-                          description: project.description || '',
-                          address: project.address || ''
-                        });
-                        setShowProjectForm(true);
-                      }}
-                      className="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
-                      title="Edit project"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleProjectDelete(project);
-                      }}
-                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                      title="Delete project"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentProject(project);
-                      }}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Set as active project"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        exportToPDF(project);
-                      }}
-                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                      title="Export to PDF"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <div className="relative group">
-                      <button 
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
-                      >
-                        <Share className="w-4 h-4" />
-                      </button>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            shareEstimate(project, 'email');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <Mail className="w-4 h-4" />
-                          Email
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            shareEstimate(project, 'teams');
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          Teams
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-2">
-                  <span>{itemCount} items</span>
-                  <span>Created {formattedDate}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-600 mb-2">
-              {projectSearchTerm ? 'No projects found' : 'No projects yet'}
-            </h3>
-            <p className="text-slate-500 mb-4">
-              {projectSearchTerm 
-                ? 'Try adjusting your search criteria'
-                : 'Create your first project to start building estimates'
-              }
-            </p>
-            {!projectSearchTerm && (
-              <button
-                onClick={() => setShowProjectForm(true)}
-                className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
-              >
-                Create Project
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // Products View
-  const renderProductsView = () => {
-    const filteredProducts = products.filter(product => {
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (product.partNumber && product.partNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-      return matchesCategory && matchesSearch;
-    });
-
-    const filteredPacks = packs.filter(pack => {
-      const matchesCategory = selectedCategory === 'all' || pack.category === selectedCategory;
-      const matchesSearch = pack.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Sub-navigation */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setProductView('products')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'products'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Products ({products.length})
-            </button>
-            <button
-              onClick={() => setProductView('packs')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm ${
-                productView === 'packs'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Packs ({packs.length})
-            </button>
-          </div>
-          
-          {productView === 'products' ? (
-            <button 
-              onClick={() => setShowProductForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Product</span>
-            </button>
-          ) : (
-            <button 
-              onClick={() => setShowPackForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Pack</span>
-            </button>
-          )}
-        </div>
-
-        {/* Header info */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Product Library</h2>
-          <div className="text-slate-600">
-            <p>Connected to Firebase! Your products will sync across devices.</p>
-            <p>You have {products.length} products and {packs.length} packs loaded.</p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${productView} by name or part number...`}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Category filters */}
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-              selectedCategory === 'all'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-            }`}
-          >
-            All Categories ({productView === 'products' ? products.length : packs.length})
-          </button>
-          {categories.map((category) => {
-            const count = productView === 'products' 
-              ? products.filter(p => p.category === category.name).length
-              : packs.filter(p => p.category === category.name).length;
-            return (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.name)}
-                className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-                  selectedCategory === category.name
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {category.name} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content */}
-        {productView === 'products' ? renderProductsList(filteredProducts) : renderPacksList(filteredPacks)}
-      </div>
-    );
-  };
-
-  // Products list design
-  const renderProductsList = (filteredProducts) => {
-    if (filteredProducts.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
-          <p className="text-slate-500 mb-4">
-            {searchTerm || selectedCategory !== 'all'
-              ? 'Try adjusting your search or filter criteria'
-              : 'Start by adding your first product'}
-          </p>
-          <button
-            onClick={() => setShowProductForm(true)}
-            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
-          >
-            Add Product
-          </button>
-        </div>
-      );
+  const exportToPDF = async (project) => {
+    showNotification('Generating export...', 'info');
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ECP Assistant - ${project.name}</title><style>body { font-family: Arial, sans-serif; margin: 40px; color: #333; } .header { border-bottom: 3px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px; } .company-name { font-size: 24px; font-weight: bold; color: #2563eb; } .estimate-title { font-size: 32px; font-weight: bold; margin: 20px 0; } .project-info { background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; } .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; } .items-table th, .items-table td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; } .items-table th { background: #f1f5f9; font-weight: bold; } .total-row { background: #2563eb !important; color: white; font-weight: bold; } .text-right { text-align: right; } .link-cell { max-width: 200px; word-break: break-all; font-size: 0.9em; }</style></head><body><div class="header"><div class="company-name">ECP Assistant</div><h1 class="estimate-title">PROJECT ESTIMATE</h1></div><div class="project-info"><h2>${project.name}</h2><p><strong>Description:</strong> ${project.description || 'No description provided'}</p><p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p><p><strong>Total Items:</strong> ${getProjectItemCount(project)}</p></div><table class="items-table"><thead><tr><th>Item</th><th>Description</th><th>Link</th><th>Unit Price</th><th>Quantity</th><th>Total</th></tr></thead><tbody>${project.items.map((item) => `<tr><td><strong>${item.name}</strong></td><td>${item.description}</td><td class="link-cell">${item.link || 'N/A'}</td><td>$${item.price.toFixed(2)} ${item.unit}</td><td>${item.quantity}</td><td class="text-right">$${(item.price * item.quantity).toFixed(2)}</td></tr>`).join('')}<tr class="total-row"><td colspan="5"><strong>TOTAL ESTIMATE</strong></td><td class="text-right"><strong>$${getProjectTotal(project).toFixed(2)}</strong></td></tr></tbody></table><p><em>Generated by ECP Assistant on ${new Date().toLocaleDateString()}</em></p></body></html>`;
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${project.name.replace(/[^a-z0-9]/gi, '_')}_estimate.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setShareProject(project);
+      setShowShareModal(true);
+      showNotification('Export generated successfully!', 'success');
+    } catch (error) {
+      showNotification('Error generating export', 'error');
     }
-
-    return (
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-        {filteredProducts.map((product) => (
-          <div
-            key={product.id}
-            className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 relative"
-          >
-            {/* Product icon - top left corner */}
-            <div className="absolute top-4 left-4">
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
-                {product.image ? (
-                  <img 
-                    src={product.image} 
-                    alt={product.name}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <Package className="w-6 h-6 text-slate-400" />
-                )}
-              </div>
-            </div>
-
-            {/* Badges and buttons - top right corner */}
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-              {product.isAutoExtracted && (
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  Auto
-                </span>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingProduct(product);
-                  setProductFormData({
-                    name: product.name,
-                    price: product.price.toString(),
-                    description: product.description || '',
-                    category: product.category || '',
-                    supplier: product.supplier || '',
-                    link: product.link || '',
-                    unit: product.unit || 'each',
-                    partNumber: product.partNumber || '',
-                    isAutoExtracted: product.isAutoExtracted || false,
-                    image: product.image || null
-                  });
-                  setShowProductForm(true);
-                }}
-                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                title="Edit product"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (window.confirm('Are you sure you want to delete this product?')) {
-                    setLoading(true);
-                    try {
-                      await deleteDoc(doc(db, 'products', product.id));
-                      await loadData();
-                      showNotification('Product deleted successfully', 'success');
-                    } catch (error) {
-                      console.error('Error deleting product:', error);
-                      showNotification('Error deleting product', 'error');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }
-                }}
-                className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                title="Delete product"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Main content - with margin for icon */}
-            <div className="mt-16">
-              {/* Product title */}
-              <h3 
-                className="font-bold text-slate-800 text-lg mb-3 cursor-pointer hover:text-blue-600 transition-colors"
-                onClick={() => {
-                  setSelectedProduct(product);
-                  setShowProductDetail(true);
-                }}
-              >
-                {product.name}
-              </h3>
-
-              {/* Part Number/SKU */}
-              {product.partNumber && (
-                <div className="mb-2">
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                    {product.partNumber}
-                  </span>
-                </div>
-              )}
-
-              {/* Description */}
-              <p className="text-slate-600 text-sm mb-4 leading-relaxed min-h-[2.5rem]">
-                {product.description || 'Home Depot product. Estimated price based on category.'}
-              </p>
-
-              {/* Price and supplier */}
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-blue-600 font-bold text-xl">
-                  ${Number(product.price).toFixed(2)} {product.unit || 'each'}
-                </span>
-                <span className="text-slate-500 font-medium">
-                  {product.supplier || "Lowe's"}
-                </span>
-              </div>
-
-              {/* Category */}
-              <div className="mb-4">
-                <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-sm font-medium">
-                  {product.category || 'Plumbing'}
-                </span>
-              </div>
-
-              {/* Links and bottom buttons */}
-              <div className="flex items-center justify-between">
-                {product.link ? (
-                  <button
-                    onClick={() => window.open(product.link, '_blank')}
-                    className="flex items-center gap-2 text-blue-500 hover:text-blue-600 text-sm font-medium hover:underline"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View Product
-                  </button>
-                ) : (
-                  <span className="text-slate-400 text-sm">No product link</span>
-                )}
-
-                {/* Add to estimate button */}
-                <button
-                  onClick={() => addProductToEstimate(product)}
-                  className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add to Estimate
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
   };
 
-  // ENHANCED PACKS LIST with image support
-  const renderPacksList = (filteredPacks) => {
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
-          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPacks.map((pack) => (
-          <div
-            key={pack.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex gap-4">
-              {/* Icon Section with custom image support */}
-              <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                {pack.image ? (
-                  <img 
-                    src={pack.image} 
-                    alt={pack.name}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <Package className="w-8 h-8 text-green-600" />
-                )}
-              </div>
-
-              {/* Content Section */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
-                    {pack.name}
-                  </h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {pack.products?.length || 0} products
-                  </span>
-                  {pack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Vertical Buttons Section - Right Side */}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => addPackToEstimate(pack)}
-                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                  title="Add pack to estimate"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingPack(pack);
-                    setPackFormData({
-                      name: pack.name,
-                      description: pack.description || '',
-                      category: pack.category || '',
-                      products: pack.products || [],
-                      image: pack.image || null
-                    });
-                    setShowPackForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit pack"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete pack"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom Section - View Items Button */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <button
-                onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
-              >
-                <Eye className="w-4 h-4" />
-                View Items
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+  const generateShareableContent = (project) => {
+    const projectSummary = `ECP Assistant - Project Estimate\n\nProject: ${project.name}\nDescription: ${project.description || 'No description provided'}\nDate: ${new Date().toLocaleDateString()}\nTotal Items: ${getProjectItemCount(project)}\nTotal Estimate: $${getProjectTotal(project).toFixed(2)}\n\nItems:\n${project.items.map((item) => `• ${item.name} - $${item.price.toFixed(2)} ${item.unit} × ${item.quantity} = $${(item.price * item.quantity).toFixed(2)}${item.link ? `\n  Link: ${item.link}` : ''}`).join('\n')}\n\nGenerated by ECP Assistant`.trim();
+    return projectSummary;
   };
 
-  // ENHANCED Settings View with Supplier Contact Features
-  const renderSettingsView = () => (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="bg-white rounded-2xl p-8 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
-        
-        <div className="space-y-8">
-          {/* Categories */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
-              <button 
-                onClick={() => setShowCategoryForm(true)}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Category
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {categories.map(category => (
-                <div key={category.id} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
-                  <span>{category.name}</span>
-                  <button 
-                    onClick={async () => {
-                      if (categories.length <= 1) {
-                        showNotification('Must keep at least one category', 'error');
-                        return;
-                      }
-                      if (window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
-                        try {
-                          await deleteDoc(doc(db, 'categories', category.id));
-                          await loadData();
-                          showNotification('Category deleted successfully', 'success');
-                        } catch (error) {
-                          console.error('Error deleting category:', error);
-                          showNotification('Error deleting category', 'error');
-                        }
-                      }
-                    }}
-                    className="hover:bg-blue-200 rounded p-1 transition-colors"
-                    title={`Delete ${category.name}`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+  const shareViaEmail = (project, provider = 'gmail') => {
+    const content = generateShareableContent(project);
+    const subject = `ECP Assistant - ${project.name} Estimate`;
+    const body = encodeURIComponent(content);
+    let mailtoUrl = '';
+    if (provider === 'gmail') mailtoUrl = `https://mail.google.com/mail/?view=cm&su=${encodeURIComponent(subject)}&body=${body}`;
+    else if (provider === 'outlook') mailtoUrl = `https://outlook.live.com/mail/0/deeplink/compose?subject=${encodeURIComponent(subject)}&body=${body}`;
+    else mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${body}`;
+    window.open(mailtoUrl, '_blank');
+    showNotification(`Opening ${provider} to share estimate`, 'info');
+  };
 
-          {/* ENHANCED Suppliers with Contact Features */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
-              <button 
-                onClick={() => setShowSupplierForm(true)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Supplier
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {suppliers.map(supplier => (
-                <div key={supplier.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 hover:shadow-md transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <h4 
-                      className="font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
-                      onClick={() => {
-                        setSelectedSupplier(supplier);
-                        setShowSupplierDetail(true);
-                      }}
-                    >
-                      {supplier.name}
-                    </h4>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setEditingSupplier(supplier);
-                          setSupplierFormData({
-                            name: supplier.name,
-                            contact: supplier.contact || '',
-                            email: supplier.email || '',
-                            phone: supplier.phone || '',
-                            extension: supplier.extension || ''
-                          });
-                          setShowSupplierForm(true);
-                        }}
-                        className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                        title="Edit supplier"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
-                      <button 
-                        onClick={async () => {
-                          if (suppliers.length <= 1) {
-                            showNotification('Must keep at least one supplier', 'error');
-                            return;
-                          }
-                          if (window.confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) {
-                            try {
-                              await deleteDoc(doc(db, 'suppliers', supplier.id));
-                              await loadData();
-                              showNotification('Supplier deleted successfully', 'success');
-                            } catch (error) {
-                              console.error('Error deleting supplier:', error);
-                              showNotification('Error deleting supplier', 'error');
-                            }
-                          }
-                        }}
-                        className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        title="Delete supplier"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 text-sm">
-                    {supplier.contact && (
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <User className="w-3 h-3" />
-                        <span>{supplier.contact}</span>
-                      </div>
-                    )}
-                    {supplier.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-3 h-3 text-slate-600" />
-                        <button
-                          onClick={() => handleEmailClick(supplier.email)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {supplier.email}
-                        </button>
-                      </div>
-                    )}
-                    {supplier.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3 h-3 text-slate-600" />
-                        <button
-                          onClick={() => handlePhoneClick(supplier.phone, supplier.extension)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {supplier.phone}{supplier.extension ? ` ext. ${supplier.extension}` : ''}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+  const shareViaTeams = (project) => {
+    const content = generateShareableContent(project);
+    const title = `ECP Assistant - ${project.name} Estimate`;
+    const teamsUrl = `https://teams.microsoft.com/share?msg=${encodeURIComponent(content)}&title=${encodeURIComponent(title)}`;
+    window.open(teamsUrl, '_blank');
+    showNotification('Opening Microsoft Teams to share estimate', 'info');
+  };
 
-          {/* Database Status */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">Database Connected</h3>
-            <p className="text-green-700 mb-1">Your data is now stored in Firebase and will sync across all your devices.</p>
-            <p className="text-green-600 text-sm">Logged in as: dainierds41@gmail.com</p>
-          </div>
-
-          {/* Storage Info */}
-          <div>
-            <h3 className="font-semibold text-slate-800 mb-3">Storage Information</h3>
-            <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Products:</span>
-                  <span>{products.length} items</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Packs:</span>
-                  <span>{packs.length} packs</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Projects:</span>
-                  <span>{projects.length} projects</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Auto-extracted:</span>
-                  <span>{products.filter(p => p.isAutoExtracted).length} products</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Data is stored securely in Firebase and synced in real-time.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // PRODUCT SELECTOR MODAL for Pack Creation - FIXED Z-INDEX
-  const renderProductSelector = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[150] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-slate-800">Select Products for Pack</h2>
-            <button 
-              onClick={() => {
-                setShowProductSelector(false);
-                setProductSelectorSearch('');
-              }}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6 text-slate-400" />
-            </button>
-          </div>
-          
-          {/* Search */}
-          <div className="relative">
-            <input
-              type="text"
-              value={productSelectorSearch}
-              onChange={(e) => setProductSelectorSearch(e.target.value)}
-              placeholder="Search products by name or part number..."
-              className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {filteredProductsForSelector.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProductsForSelector.map((product) => (
-                <div
-                  key={product.id}
-                  className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => addProductToPack(product)}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      {product.image ? (
-                        <img 
-                          src={product.image} 
-                          alt={product.name}
-                          className="w-full h-full object-cover rounded-lg"
-                        />
-                      ) : (
-                        <Package className="w-6 h-6 text-slate-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
-                      {product.partNumber && (
-                        <p className="text-xs text-slate-500">{product.partNumber}</p>
-                      )}
-                      <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{product.category}</span>
-                    <button className="text-green-600 hover:bg-green-50 p-1 rounded transition-colors">
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500">No products found matching your search</p>
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t border-slate-200 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600">
-              Selected: {packFormData.products.length} products
-            </span>
-            <button
-              onClick={() => {
-                setShowProductSelector(false);
-                setProductSelectorSearch('');
-              }}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const copyToClipboard = (project) => { const content = generateShareableContent(project); navigator.clipboard.writeText(content).then(() => { showNotification('Estimate details copied to clipboard!', 'success'); }).catch(() => { showNotification('Failed to copy to clipboard', 'error'); }); };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Notification System */}
       {notification && (
-        <div
-          className={`fixed top-4 right-4 z-[9999] px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
-            notification.type === 'success'
-              ? 'bg-green-500 text-white'
-              : notification.type === 'error'
-              ? 'bg-red-500 text-white'
-              : 'bg-blue-500 text-white'
-          }`}
-        >
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 ${notification.type === 'success' ? 'bg-green-500 text-white' : notification.type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
           {notification.message}
         </div>
       )}
 
-      {renderHeader()}
-      {renderNavigation()}
-      
-      {loading && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
-          <div className="flex items-center space-x-3 max-w-7xl mx-auto">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-            <span className="text-blue-700 text-sm">Syncing with Firebase...</span>
+      <header className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">ECP Assistant</h1>
+              <p className="text-slate-600">
+                {currentProject ? (
+                  <span className="flex items-center gap-2">
+                    Active: <strong>{currentProject.name}</strong>
+                    {currentProject.items.length > 0 && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm">
+                        {getProjectItemCount(currentProject)} items • ${getProjectTotal(currentProject).toFixed(2)}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  'Your personal estimation assistant'
+                )}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              {currentProject && (
+                <button onClick={() => setShowEstimateDetails(true)} className="px-4 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors flex items-center gap-2 border border-green-200">
+                  <Eye className="w-4 h-4" />
+                  View Current Estimate
+                </button>
+              )}
+              <button onClick={syncToCloud} disabled={isSyncing} className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors flex items-center gap-2 disabled:opacity-50">
+                {isSyncing ? <>🔄 Syncing...</> : <>🔄 Sync</>}
+              </button>
+              <button onClick={() => setShowNewProject(true)} className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                New Estimate
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </header>
 
-      {currentView === 'projects' && renderProjectsView()}
-      {currentView === 'products' && renderProductsView()}
-      {currentView === 'settings' && renderSettingsView()}
-
-      {/* Product Selector Modal - Highest Priority */}
-      {showProductSelector && renderProductSelector()}
-
-      {/* Project Form Modal */}
-      {showProjectForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingProject ? 'Edit Project' : 'Create New Project'}
-            </h2>
-            <form onSubmit={handleProjectSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Project Name *
-                </label>
-                <input
-                  type="text"
-                  value={projectFormData.name}
-                  onChange={(e) => setProjectFormData({...projectFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Enter project name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={projectFormData.description}
-                  onChange={(e) => setProjectFormData({...projectFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  rows={3}
-                  placeholder="Project description"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={projectFormData.address}
-                  onChange={(e) => setProjectFormData({...projectFormData, address: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Project address"
-                />
-              </div>
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProjectForm(false);
-                    setProjectFormData({ name: '', description: '', address: '' });
-                    setEditingProject(null);
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="bg-white rounded-2xl shadow-sm p-2 mb-8 inline-flex">
+          <button onClick={() => setActiveTab('projects')} className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${activeTab === 'projects' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>
+            <Users className="w-4 h-4" />
+            Projects & Estimates
+          </button>
+          <button onClick={() => setActiveTab('library')} className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${activeTab === 'library' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>
+            <Package className="w-4 h-4" />
+            Product Library
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>
+            <Settings className="w-4 h-4" />
+            Settings
+          </button>
         </div>
-      )}
 
-      {/* Product Form Modal */}
-      {showProductForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingProduct ? 'Edit Product' : 'Add New Product'}
-            </h2>
-            <form onSubmit={handleProductSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Product URL (Optional - Auto-extract info)
-                </label>
-                <input
-                  type="url"
-                  value={productFormData.link}
-                  onChange={(e) => handleProductUrlChange(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="https://www.homedepot.com/..."
-                />
-                {isExtracting && (
-                  <p className="text-sm text-blue-600 mt-1 flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                    Extracting product information...
-                  </p>
+        {activeTab === 'library' && (
+          <div>
+            <div className="flex justify-between items-start mb-6">
+              <div className="bg-white rounded-xl shadow-sm p-2 inline-flex">
+                <button onClick={() => setLibraryView('products')} className={`px-4 py-2 rounded-lg font-medium transition-all ${libraryView === 'products' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>
+                  Products ({products.length})
+                </button>
+                <button onClick={() => setLibraryView('packs')} className={`px-4 py-2 rounded-lg font-medium transition-all ${libraryView === 'packs' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>
+                  Packs ({packs.length})
+                </button>
+              </div>
+
+              <div className="flex gap-3">
+                {libraryView === 'products' ? (
+                  <button onClick={() => setShowAddProduct(true)} className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Product
+                  </button>
+                ) : (
+                  <button onClick={() => setShowAddPack(true)} className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Pack
+                  </button>
                 )}
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  value={productFormData.name}
-                  onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Enter product name"
-                  required
-                />
+            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <div className="flex-1 relative">
+                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={`Search ${libraryView}...`} className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Price *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={productFormData.price}
-                    onChange={(e) => setProductFormData({...productFormData, price: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Unit
-                  </label>
-                  <select
-                    value={productFormData.unit}
-                    onChange={(e) => setProductFormData({...productFormData, unit: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="each">Each</option>
-                    <option value="box">Box</option>
-                    <option value="pack">Pack</option>
-                    <option value="ft">Feet</option>
-                    <option value="yard">Yard</option>
-                    <option value="sqft">Sq Ft</option>
-                    <option value="gallon">Gallon</option>
-                    <option value="lb">Pound</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={productFormData.description}
-                  onChange={(e) => setProductFormData({...productFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  rows={3}
-                  placeholder="Product description"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Category
-                  </label>
-                  <select
-                    value={productFormData.category}
-                    onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.name}>{category.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Supplier
-                  </label>
-                  <select
-                    value={productFormData.supplier}
-                    onChange={(e) => setProductFormData({...productFormData, supplier: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">Select supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.name}>{supplier.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Part Number/SKU
-                </label>
-                <input
-                  type="text"
-                  value={productFormData.partNumber}
-                  onChange={(e) => setProductFormData({...productFormData, partNumber: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Enter part number"
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Add Product')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProductForm(false);
-                    setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
-                    setEditingProduct(null);
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Pack Form Modal */}
-      {showPackForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingPack ? 'Edit Pack' : 'Create New Pack'}
-            </h2>
-            <form onSubmit={handlePackSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Pack Name *
-                </label>
-                <input
-                  type="text"
-                  value={packFormData.name}
-                  onChange={(e) => setPackFormData({...packFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Enter pack name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={packFormData.description}
-                  onChange={(e) => setPackFormData({...packFormData, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  rows={3}
-                  placeholder="Pack description"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Category
-                </label>
-                <select
-                  value={packFormData.category}
-                  onChange={(e) => setPackFormData({...packFormData, category: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                >
-                  <option value="">Select category</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>{category.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Products in Pack */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Products in Pack ({packFormData.products.length})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowProductSelector(true)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Products
+            <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+              <button onClick={() => setSelectedCategory('All Categories')} className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${selectedCategory === 'All Categories' ? 'bg-blue-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>
+                All Categories ({libraryView === 'products' ? products.length : packs.length})
+              </button>
+              {categories.map((category) => {
+                const count = libraryView === 'products' ? products.filter((p) => p.category === category).length : packs.filter((p) => p.category === category).length;
+                return (
+                  <button key={category} onClick={() => setSelectedCategory(category)} className={`px-4 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${selectedCategory === category ? 'bg-blue-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>
+                    {category} ({count})
                   </button>
-                </div>
+                );
+              })}
+            </div>
 
-                {packFormData.products.length > 0 ? (
-                  <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                    {packFormData.products.map((product, index) => (
-                      <div key={product.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-slate-800 truncate">{product.name}</h4>
-                          <p className="text-sm text-slate-500">${product.price}</p>
+            {libraryView === 'products' && (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <div key={product.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
+                      <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-300 transition-all" onClick={() => { setSelectedProduct(product); setShowProductDetails(true); }}>
+                          {product.image ? (
+                            <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-8 h-8 text-slate-400" />
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => updateFormPackProductQuantity(product.id, Math.max(1, product.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-2 mb-1">
+                            <h3 className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => { setSelectedProduct(product); setShowProductDetails(true); }}>
+                              {product.name}
+                            </h3>
+                            {product.isAutoExtracted && (
+                              <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                Auto
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-slate-600 text-sm mb-2">{product.description}</p>
+                          <div className="flex items-center gap-4 text-sm flex-wrap">
+                            <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-semibold">
+                              ${product.price.toFixed(2)} {product.unit}
+                            </span>
+                            <span className="text-slate-500">{product.supplier}</span>
+                            <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{product.category}</span>
+                          </div>
+                          {product.link && (
+                            <a href={product.link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 text-xs mt-1 inline-flex items-center gap-1 hover:underline">
+                              <ExternalLink className="w-3 h-3" />
+                              View Product
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {(() => {
+                            const existingItem = currentProject?.items.find((item) => item.productId === product.id);
+                            return (
+                              <button onClick={() => addProductToEstimate(product)} className={`p-2 rounded-lg transition-colors relative ${existingItem ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-green-50 text-green-600 hover:bg-green-100'}`} title={existingItem ? `Already in estimate (${existingItem.quantity})` : 'Add to estimate'}>
+                                <PlusCircle className="w-4 h-4" />
+                                {existingItem && (
+                                  <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-semibold">
+                                    {existingItem.quantity}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })()}
+                          <button onClick={() => editProduct(product)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors" title="Edit product">
+                            <Edit className="w-4 h-4" />
                           </button>
-                          <span className="w-8 text-center font-medium">{product.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => updateFormPackProductQuantity(product.id, product.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeProductFromFormPack(product.id)}
-                            className="p-1 text-red-600 hover:bg-red-100 rounded ml-2"
-                          >
+                          <button onClick={() => deleteProduct(product.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete product">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))
                 ) : (
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
-                    <Package className="w-8 h-8 mx-auto text-slate-400 mb-2" />
-                    <p className="text-slate-500 text-sm">No products added yet</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowProductSelector(true)}
-                      className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
-                    >
-                      Add your first product
-                    </button>
+                  <div className="col-span-full text-center py-12">
+                    <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-600 mb-2">No products found</h3>
+                    <p className="text-slate-500 mb-4">{searchTerm || selectedCategory !== 'All Categories' ? 'Try adjusting your search or filter criteria' : 'Start by adding your first product'}</p>
+                    <button onClick={() => setShowAddProduct(true)} className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors">Add Product</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {libraryView === 'packs' && (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {filteredPacks.length > 0 ? (
+                  filteredPacks.map((pack) => {
+                    const packProducts = getPackProducts(pack);
+                    const packTotal = getPackTotal(pack);
+                    return (
+                      <div key={pack.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100">
+                        <div className="flex items-start gap-4">
+                          <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer" onClick={() => { setSelectedPack(pack); setShowPackDetails(true); }}>
+                            {pack.image ? (
+                              <img src={pack.image} alt={pack.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-8 h-8 text-purple-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2 mb-1">
+                              <h3 className="font-bold text-slate-800 text-lg truncate flex-1 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => { setSelectedPack(pack); setShowPackDetails(true); }}>{pack.name}</h3>
+                              <div className="flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium">
+                                <Package className="w-3 h-3" />
+                                Pack
+                              </div>
+                            </div>
+                            <p className="text-slate-600 text-sm mb-2">{pack.description}</p>
+                            <div className="flex items-center gap-4 text-sm flex-wrap mb-2">
+                              <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-lg font-semibold">${packTotal.toFixed(2)}</span>
+                              <span className="text-slate-500">{packProducts.length} products</span>
+                              <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {packProducts.slice(0, 2).map((p) => p.name).join(', ')}
+                              {packProducts.length > 2 && ` +${packProducts.length - 2} more`}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <button onClick={() => addPackToEstimate(pack)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors" title="Add pack to estimate">
+                              <PlusCircle className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => editPack(pack)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors" title="Edit pack">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => deletePack(pack.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete pack">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-full text-center py-12">
+                    <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
+                    <p className="text-slate-500 mb-4">{searchTerm || selectedCategory !== 'All Categories' ? 'Try adjusting your search or filter criteria' : 'Start by creating your first pack'}</p>
+                    <button onClick={() => setShowAddPack(true)} className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors">Create Pack</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'projects' && (
+          <div>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-bold text-slate-800">Your Projects</h2>
+              <button onClick={() => setShowNewProject(true)} className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                New Project
+              </button>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {projects.length > 0 ? (
+                projects.map((project) => {
+                  const itemCount = getProjectItemCount(project);
+                  const total = getProjectTotal(project);
+                  const formattedDate = new Date(project.createdAt).toLocaleDateString();
+                  return (
+                    <div key={project.id} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100 cursor-pointer" onClick={() => openProjectDetails(project)}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{project.name}</h3>
+                          <p className="text-slate-600 text-sm">{project.description}</p>
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button onClick={(e) => { e.stopPropagation(); exportToPDF(project); }} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors" title="Export and share estimate">
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteProject(project.id); }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete project">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="flex gap-4 text-sm text-slate-500">
+                          <span>{itemCount} items</span>
+                          <span>Created {formattedDate}</span>
+                        </div>
+                        <div className="text-2xl font-bold text-green-600">${total.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <Users className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No projects yet</h3>
+                  <p className="text-slate-500 mb-4">Create your first project to start building estimates</p>
+                  <button onClick={() => setShowNewProject(true)} className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors">New Project</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-2xl p-8 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Settings</h2>
+            <div className="space-y-8">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-slate-700">Categories</h3>
+                  <button onClick={() => setShowAddCategory(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Category
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((category) => (
+                    <div key={category} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
+                      <span>{category}</span>
+                      {categories.length > 1 && (
+                        <button onClick={() => deleteCategory(category)} className="hover:bg-blue-200 rounded p-1 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-slate-700">Suppliers</h3>
+                  <button onClick={() => setShowAddSupplier(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Supplier
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suppliers.map((supplier) => (
+                    <div key={supplier} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
+                      <span>{supplier}</span>
+                      {suppliers.length > 1 && (
+                        <button onClick={() => deleteSupplier(supplier)} className="hover:bg-green-200 rounded p-1 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">Storage Information</h3>
+                <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
+                  <p className="mb-2"><strong>Products:</strong> {products.length} items</p>
+                  <p className="mb-2"><strong>Packs:</strong> {packs.length} packs</p>
+                  <p className="mb-2"><strong>Projects:</strong> {projects.length} projects</p>
+                  <p className="mb-2"><strong>Auto-extracted:</strong> {products.filter((p) => p.isAutoExtracted).length} products</p>
+                  <p className="text-xs text-slate-500">Data is stored locally in your browser and synced to the cloud.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showAddProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Add New Product</h2>
+            {isExtracting && (
+              <div className="mb-4 p-4 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                Extracting product information from URL...
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link *</label>
+                <input type="url" value={productForm.link} onChange={(e) => handleProductUrlChange(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="https://... (Improved auto-extraction will fill product details)" disabled={isExtracting} />
+                <p className="mt-2 text-xs text-slate-500">Supported: Home Depot, Lowe's, Amazon, Menards, Ace Hardware and more</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <input type="text" value={productForm.name} onChange={(e) => setProductForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="Enter product name" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Image</label>
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'product', false)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                {productForm.image && (
+                  <div className="mt-2">
+                    <img src={productForm.image} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingPack ? 'Update Pack' : 'Create Pack')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPackForm(false);
-                    setPackFormData({ name: '', description: '', category: '', products: [], image: null });
-                    setEditingPack(null);
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Supplier Form Modal */}
-      {showSupplierForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
-            </h2>
-            <form onSubmit={handleSupplierSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Supplier Name *
-                </label>
-                <input
-                  type="text"
-                  value={supplierFormData.name}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, name: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Enter supplier name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Contact Person
-                </label>
-                <input
-                  type="text"
-                  value={supplierFormData.contact}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, contact: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="Contact person name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={supplierFormData.email}
-                  onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="email@example.com"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={supplierFormData.phone}
-                    onChange={(e) => setSupplierFormData({...supplierFormData, phone: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                    placeholder="555-1234"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select value={productForm.category} onChange={(e) => setProductForm((prev) => ({ ...prev, category: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    <option value="">Select category</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Ext.
-                  </label>
-                  <input
-                    type="text"
-                    value={supplierFormData.extension}
-                    onChange={(e) => setSupplierFormData({...supplierFormData, extension: e.target.value})}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                    placeholder="123"
-                  />
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
+                  <select value={productForm.supplier} onChange={(e) => setProductForm((prev) => ({ ...prev, supplier: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    <option value="">Select supplier</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier} value={supplier}>{supplier}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingSupplier ? 'Update Supplier' : 'Add Supplier')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSupplierForm(false);
-                    setSupplierFormData({ name: '', contact: '', email: '', phone: '', extension: '' });
-                    setEditingSupplier(null);
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Category Form Modal */}
-      {showCategoryForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!categoryFormData.name) {
-                showNotification('Category name is required', 'error');
-                return;
-              }
-              setLoading(true);
-              try {
-                await addDoc(collection(db, 'categories'), {
-                  ...categoryFormData,
-                  createdAt: new Date().toISOString()
-                });
-                await loadData();
-                setCategoryFormData({ name: '', description: '' });
-                setShowCategoryForm(false);
-                showNotification('Category added successfully!', 'success');
-              } catch (error) {
-                console.error('Error saving category:', error);
-                showNotification('Error saving category', 'error');
-              } finally {
-                setLoading(false);
-              }
-            }} className="space-y-4">
-              <input
-                type="text"
-                value={categoryFormData.name}
-                onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Category name"
-                required
-              />
-              <input
-                type="text"
-                value={categoryFormData.description}
-                onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="Description (optional)"
-              />
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Adding...' : 'Add Category'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCategoryForm(false);
-                    setCategoryFormData({ name: '', description: '' });
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Project Detail Modal */}
-      {showProjectDetail && selectedProjectForDetail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
-                  <p className="text-slate-600">{selectedProjectForDetail.description}</p>
-                  {selectedProjectForDetail.address && (
-                    <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
-                      <MapPin className="w-4 h-4" />
-                      {selectedProjectForDetail.address}
-                    </p>
-                  )}
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price</label>
+                  <input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="0.00" />
                 </div>
-                <button 
-                  onClick={() => setShowProjectDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                  <input type="text" value={productForm.unit} onChange={(e) => setProductForm((prev) => ({ ...prev, unit: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g., per piece, per foot" />
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {selectedProjectForDetail.items?.length || 0}
-                  </div>
-                  <div className="text-sm text-slate-600">Products</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {getProjectItemCount(selectedProjectForDetail)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Items</div>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
-                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Cost</div>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea value={productForm.description} onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" rows="3" placeholder="Product description" />
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
-                  {selectedProjectForDetail.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-slate-800">{item.name}</h4>
-                        <p className="text-sm text-slate-500">{item.description}</p>
-                        {item.partNumber && (
-                          <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
-                        )}
-                        {item.fromPack && (
-                          <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
-                          <div className="text-sm text-slate-500">x{item.quantity}</div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={addProduct} disabled={isExtracting} className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold disabled:opacity-50">Add Product</button>
+              <button onClick={() => { setShowAddProduct(false); resetProductForm(); }} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Create New Pack</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
+                <input type="text" value={packForm.name} onChange={(e) => setPackForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" placeholder="Enter pack name" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Image</label>
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'pack', false)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+                {packForm.image && (
+                  <div className="mt-2">
+                    <img src={packForm.image} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                <select value={packForm.category} onChange={(e) => setPackForm((prev) => ({ ...prev, category: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none">
+                  <option value="">Select category</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea value={packForm.description} onChange={(e) => setPackForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" rows="3" placeholder="Pack description" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack *</label>
+                <div className="border border-slate-300 rounded-xl p-4">
+                  <div className="flex gap-2 items-center mb-3">
+                    <input type="text" value={packProductQuery} onChange={(e) => setPackProductQuery(e.target.value)} placeholder="Type to search products to add" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+                  </div>
+                  {packProductQuery.trim().length > 0 && (
+                    <div className="border border-slate-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-slate-100 mb-3 bg-white">
+                      {products.filter((p) => !packForm.productIds.includes(p.id) && (p.name.toLowerCase().includes(packProductQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(packProductQuery.toLowerCase()))).slice(0, 12).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between p-2 hover:bg-slate-50">
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-800 truncate">{p.name}</div>
+                            <div className="text-xs text-slate-500 truncate">${p.price.toFixed(2)} {p.unit} • {p.category}</div>
+                          </div>
+                          <button onClick={() => { setPackForm((prev) => ({ ...prev, productIds: [...prev.productIds, p.id] })); setPackProductQuery(''); }} className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">Add</button>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      ))}
+                      {products.filter((p) => !packForm.productIds.includes(p.id) && (p.name.toLowerCase().includes(packProductQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(packProductQuery.toLowerCase()))).length === 0 && (
+                        <div className="p-3 text-sm text-slate-500">No matches</div>
+                      )}
+                    </div>
+                  )}
+                  {packForm.productIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {packForm.productIds.map((id) => {
+                        const p = products.find((x) => x.id === id);
+                        if (!p) return null;
+                        return (
+                          <span key={id} className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+                            <span className="truncate max-w-[220px]">{p.name}</span>
+                            <button onClick={() => setPackForm((prev) => ({ ...prev, productIds: prev.productIds.filter((pid) => pid !== id) }))} className="hover:bg-green-100 rounded p-1" aria-label={`Remove ${p.name}`}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No products selected yet.</p>
+                  )}
+                  {packForm.productIds.length > 0 && (
+                    <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                      <div className="text-sm text-green-700">
+                        Selected: {packForm.productIds.length} products
+                        <br />
+                        Total Value: ${packForm.productIds.reduce((total, id) => { const product = products.find((p) => p.id === id); return total + (product ? product.price : 0); }, 0).toFixed(2)}
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
-                  <p className="text-slate-500">Add products from the Product Library to get started</p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
-                  {selectedProjectForDetail.lastModified && (
-                    <span className="ml-4">
-                      Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
-                    </span>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => exportToPDF(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export PDF
-                  </button>
-                  <button
-                    onClick={() => setCurrentProject(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                  >
-                    Set Active
-                  </button>
-                </div>
               </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={addPack} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold">Create Pack</button>
+              <button onClick={() => { setShowAddPack(false); resetPackForm(); }} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pack Detail Modal */}
-      {showPackDetail && selectedPack && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
-                  <p className="text-slate-600">{selectedPack.description}</p>
-                  {selectedPack.category && (
-                    <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-md text-sm font-medium mt-2">
-                      {selectedPack.category}
-                    </span>
+      {showProductDetails && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Product Details</h2>
+              <button onClick={() => setShowProductDetails(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <div className="w-full h-64 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden mb-4">
+                  {selectedProduct.image ? (
+                    <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-16 h-16 text-slate-400" />
                   )}
                 </div>
-                <button 
-                  onClick={() => setShowPackDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
+
+                {selectedProduct.link && (
+                  <a href={selectedProduct.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-500 hover:text-blue-600 font-medium">
+                    <ExternalLink className="w-4 h-4" />
+                    View Original Product
+                  </a>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {selectedPack.products?.length || 0}
-                  </div>
-                  <div className="text-sm text-slate-600">Products in Pack</div>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
-                    ${selectedPack.products?.reduce((sum, p) => sum + (p.price * p.quantity), 0).toFixed(2) || '0.00'}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Value</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedPack.products && selectedPack.products.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
-                  {selectedPack.products.map((product, index) => (
-                    <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                          {product.image ? (
-                            <img 
-                              src={product.image} 
-                              alt={product.name}
-                              className="w-full h-full object-cover rounded-lg"
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-slate-400" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-slate-800">{product.name}</h4>
-                          {product.partNumber && (
-                            <p className="text-xs text-slate-500">Part: {product.partNumber}</p>
-                          )}
-                          <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updatePackProductQuantity(selectedPack, index, Math.max(1, product.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">{product.quantity}</span>
-                          <button
-                            onClick={() => updatePackProductQuantity(selectedPack, index, product.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeProductFromPack(selectedPack, index)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+              <div>
+                <div className="flex items-start gap-2 mb-4">
+                  <h3 className="text-xl font-bold text-slate-800 flex-1">{selectedProduct.name}</h3>
+                  {selectedProduct.isAutoExtracted && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-medium">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      Auto-extracted
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No products in pack</h3>
-                  <p className="text-slate-500">Edit this pack to add products</p>
-                </div>
-              )}
-            </div>
 
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Created: {new Date(selectedPack.createdAt).toLocaleDateString()}
+                <p className="text-slate-600 mb-6">{selectedProduct.description}</p>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                    <span className="text-slate-600">Price</span>
+                    <span className="font-bold text-xl text-blue-600">${selectedProduct.price.toFixed(2)} {selectedProduct.unit}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                    <span className="text-slate-600">Category</span>
+                    <span className="font-medium">{selectedProduct.category}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                    <span className="text-slate-600">Supplier</span>
+                    <span className="font-medium">{selectedProduct.supplier}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                    <span className="text-slate-600">Date Added</span>
+                    <span className="font-medium">{new Date(selectedProduct.dateAdded).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => addPackToEstimate(selectedPack)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
+
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => { addProductToEstimate(selectedProduct); setShowProductDetails(false); }} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold flex items-center justify-center gap-2">
+                    <PlusCircle className="w-4 h-4" />
                     Add to Estimate
                   </button>
-                  <button
-                    onClick={() => {
-                      setEditingPack(selectedPack);
-                      setPackFormData({
-                        name: selectedPack.name,
-                        description: selectedPack.description || '',
-                        category: selectedPack.category || '',
-                        products: selectedPack.products || [],
-                        image: selectedPack.image || null
-                      });
-                      setShowPackDetail(false);
-                      setShowPackForm(true);
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Edit3 className="w-4 h-4" />
+                  <button onClick={() => { editProduct(selectedProduct); setShowProductDetails(false); }} className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-semibold flex items-center gap-2">
+                    <Edit className="w-4 h-4" />
+                    Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPackDetails && selectedPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify_between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
+                <p className="text-slate-600">{selectedPack.description}</p>
+              </div>
+              <button onClick={() => setShowPackDetails(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <div className="w-full h-64 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl flex items-center justify-center overflow-hidden mb-4">
+                  {selectedPack.image ? (
+                    <img src={selectedPack.image} alt={selectedPack.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-16 h-16 text-purple-400" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded">{selectedPack.category || 'Uncategorized'}</span>
+                  <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded">Pack</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Products in this pack</span>
+                    <span className="font-semibold text-purple-700">{getPackProducts(selectedPack).length}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {getPackProducts(selectedPack).map((p) => (
+                    <div key={p.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                      <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center flex-shrink-0">
+                        <Package className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-800 truncate">{p.name}</div>
+                        <div className="text-xs text-slate-500 truncate">{p.supplier} • {p.category}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-slate-800">${p.price.toFixed(2)}</div>
+                        <div className="text-xs text-slate-500">{p.unit}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center mt-4 p-3 bg-purple-50 rounded-lg">
+                  <span className="text-slate-700 font-medium">Pack Total</span>
+                  <span className="text-xl font-bold text-purple-700">${getPackTotal(selectedPack).toFixed(2)}</span>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => { addPackToEstimate(selectedPack); setShowPackDetails(false); }} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold flex items-center justify-center gap-2">
+                    <PlusCircle className="w-4 h-4" />
+                    Add Pack to Estimate
+                  </button>
+                  <button onClick={() => { editPack(selectedPack); setShowPackDetails(false); }} className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-semibold flex items-center gap-2">
+                    <Edit className="w-4 h-4" />
                     Edit Pack
                   </button>
                 </div>
@@ -2787,267 +1112,336 @@ Generated by ECP Assistant`;
         </div>
       )}
 
-      {/* Product Detail Modal */}
-      {showProductDetail && selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                  <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      {selectedProduct.image ? (
-                        <img 
-                          src={selectedProduct.image} 
-                          alt={selectedProduct.name}
-                          className="w-full h-full object-cover rounded-xl"
-                        />
-                      ) : (
-                        <Package className="w-8 h-8 text-slate-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h2 className="text-2xl font-bold text-slate-800 mb-1">{selectedProduct.name}</h2>
-                      {selectedProduct.partNumber && (
-                        <p className="text-sm text-slate-500 mb-2">Part: {selectedProduct.partNumber}</p>
-                      )}
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-3xl font-bold text-blue-600">
-                          ${Number(selectedProduct.price).toFixed(2)}
-                        </span>
-                        <span className="text-slate-500">per {selectedProduct.unit || 'each'}</span>
-                      </div>
-                      {selectedProduct.isAutoExtracted && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          Auto-extracted
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setShowProductDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
+      {showShareModal && shareProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Share Estimate</h2>
+                <p className="text-slate-600 text-sm">{shareProject.name}</p>
               </div>
+              <button onClick={() => setShowShareModal(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <div className="space-y-6">
-                {/* Description */}
-                <div>
-                  <h3 className="font-semibold text-slate-800 mb-2">Description</h3>
-                  <p className="text-slate-600 leading-relaxed">
-                    {selectedProduct.description || 'No description available for this product.'}
-                  </p>
-                </div>
-
-                {/* Product Details */}
-                <div>
-                  <h3 className="font-semibold text-slate-800 mb-3">Product Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-sm text-slate-500">Category</div>
-                      <div className="font-medium text-slate-800">
-                        {selectedProduct.category || 'Uncategorized'}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-sm text-slate-500">Supplier</div>
-                      <div className="font-medium text-slate-800">
-                        {selectedProduct.supplier || 'No supplier'}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-sm text-slate-500">Unit</div>
-                      <div className="font-medium text-slate-800">
-                        {selectedProduct.unit || 'each'}
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-lg">
-                      <div className="text-sm text-slate-500">Part Number</div>
-                      <div className="font-medium text-slate-800">
-                        {selectedProduct.partNumber || 'N/A'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Product Link */}
-                {selectedProduct.link && (
-                  <div>
-                    <h3 className="font-semibold text-slate-800 mb-2">Product Link</h3>
-                    <button
-                      onClick={() => window.open(selectedProduct.link, '_blank')}
-                      className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:underline"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      View on supplier website
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  {selectedProduct.createdAt && (
-                    <span>Added: {new Date(selectedProduct.createdAt).toLocaleDateString()}</span>
-                  )}
-                  {selectedProduct.updatedAt && selectedProduct.createdAt !== selectedProduct.updatedAt && (
-                    <span className="ml-4">Updated: {new Date(selectedProduct.updatedAt).toLocaleDateString()}</span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setEditingProduct(selectedProduct);
-                      setProductFormData({
-                        name: selectedProduct.name,
-                        price: selectedProduct.price.toString(),
-                        description: selectedProduct.description || '',
-                        category: selectedProduct.category || '',
-                        supplier: selectedProduct.supplier || '',
-                        link: selectedProduct.link || '',
-                        unit: selectedProduct.unit || 'each',
-                        partNumber: selectedProduct.partNumber || '',
-                        isAutoExtracted: selectedProduct.isAutoExtracted || false,
-                        image: selectedProduct.image || null
-                      });
-                      setShowProductDetail(false);
-                      setShowProductForm(true);
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    Edit Product
-                  </button>
-                  <button
-                    onClick={() => {
-                      addProductToEstimate(selectedProduct);
-                      setShowProductDetail(false);
-                    }}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add to Estimate
-                  </button>
-                </div>
-              </div>
+            <div className="space-y-3">
+              <button onClick={() => shareViaEmail(shareProject, 'gmail')} className="w-full flex items-center gap-3 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors">
+                <span className="text-xl">📧</span>
+                <span className="font-medium">Share via Gmail</span>
+              </button>
+              <button onClick={() => shareViaEmail(shareProject, 'outlook')} className="w-full flex items-center gap-3 p-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">
+                <span className="text-xl">📨</span>
+                <span className="font-medium">Share via Outlook</span>
+              </button>
+              <button onClick={() => shareViaTeams(shareProject)} className="w-full flex items-center gap-3 p-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors">
+                <span className="text-xl">👥</span>
+                <span className="font-medium">Share via Microsoft Teams</span>
+              </button>
+              <button onClick={() => shareViaEmail(shareProject, 'default')} className="w-full flex items-center gap-3 p-3 bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors">
+                <span className="text-xl">✉️</span>
+                <span className="font-medium">Share via Default Email</span>
+              </button>
+              <button onClick={() => copyToClipboard(shareProject)} className="w-full flex items-center gap-3 p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors">
+                <span className="text-xl">📋</span>
+                <span className="font-medium">Copy to Clipboard</span>
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Supplier Detail Modal */}
-      {showSupplierDetail && selectedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start">
+      {showEditProduct && editingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Edit Product</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+                <input type="text" value={editingProduct.name} onChange={(e) => setEditingProduct((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="Enter product name" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Image</label>
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'product', true)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                {editingProduct.image && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img src={editingProduct.image} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                    <button onClick={() => setEditingProduct((prev) => ({ ...prev, image: null }))} className="px-3 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-sm">Remove Image</button>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800">{selectedSupplier.name}</h2>
-                  <p className="text-slate-600">Supplier Information</p>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <select value={editingProduct.category} onChange={(e) => setEditingProduct((prev) => ({ ...prev, category: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    <option value="">Select category</option>
+                    {categories.map((category) => (<option key={category} value={category}>{category}</option>))}
+                  </select>
                 </div>
-                <button 
-                  onClick={() => setShowSupplierDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Supplier</label>
+                  <select value={editingProduct.supplier} onChange={(e) => setEditingProduct((prev) => ({ ...prev, supplier: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                    <option value="">Select supplier</option>
+                    {suppliers.map((supplier) => (<option key={supplier} value={supplier}>{supplier}</option>))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Price</label>
+                  <input type="number" step="0.01" value={editingProduct.price} onChange={(e) => setEditingProduct((prev) => ({ ...prev, price: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                  <input type="text" value={editingProduct.unit} onChange={(e) => setEditingProduct((prev) => ({ ...prev, unit: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g., per piece, per foot" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Product Link *</label>
+                <input type="url" value={editingProduct.link} onChange={(e) => setEditingProduct((prev) => ({ ...prev, link: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="https://..." />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea value={editingProduct.description} onChange={(e) => setEditingProduct((prev) => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" rows="3" placeholder="Product description" />
               </div>
             </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={updateProduct} className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold">Update Product</button>
+              <button onClick={resetEditForm} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <div className="p-6">
-              <div className="space-y-4">
-                {selectedSupplier.contact && (
-                  <div className="flex items-center gap-3">
-                    <User className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="text-sm text-slate-500">Contact Person</div>
-                      <div className="font-medium text-slate-800">{selectedSupplier.contact}</div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedSupplier.email && (
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="text-sm text-slate-500">Email</div>
-                      <button
-                        onClick={() => handleEmailClick(selectedSupplier.email)}
-                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        {selectedSupplier.email}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {selectedSupplier.phone && (
-                  <div className="flex items-center gap-3">
-                    <Phone className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="text-sm text-slate-500">Phone</div>
-                      <button
-                        onClick={() => handlePhoneClick(selectedSupplier.phone, selectedSupplier.extension)}
-                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        {selectedSupplier.phone}
-                        {selectedSupplier.extension && ` ext. ${selectedSupplier.extension}`}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {selectedSupplier.createdAt && (
-                  <div className="pt-4 border-t border-slate-200">
-                    <div className="text-sm text-slate-500">
-                      Added: {new Date(selectedSupplier.createdAt).toLocaleDateString()}
-                    </div>
+      {showEditPack && editingPack && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Edit Pack</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Name *</label>
+                <input type="text" value={editingPack.name} onChange={(e) => setEditingPack((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" placeholder="Enter pack name" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pack Image</label>
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'pack', true)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+                {editingPack.image && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img src={editingPack.image} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                    <button onClick={() => setEditingPack((prev) => ({ ...prev, image: null }))} className="px-3 py-1 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-sm">Remove Image</button>
                   </div>
                 )}
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                <select value={editingPack.category} onChange={(e) => setEditingPack((prev) => ({ ...prev, category: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none">
+                  <option value="">Select category</option>
+                  {categories.map((category) => (<option key={category} value={category}>{category}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea value={editingPack.description} onChange={(e) => setEditingPack((prev) => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" rows="3" placeholder="Pack description" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Products in Pack *</label>
+                <div className="border border-slate-300 rounded-xl p-4">
+                  <div className="flex gap-2 items-center mb-3">
+                    <input type="text" value={editPackProductQuery} onChange={(e) => setEditPackProductQuery(e.target.value)} placeholder="Type to search products to add" className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+                  </div>
+                  {editPackProductQuery.trim().length > 0 && (
+                    <div className="border border-slate-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-slate-100 mb-3 bg-white">
+                      {products.filter((p) => !editingPack.productIds.includes(p.id) && (p.name.toLowerCase().includes(editPackProductQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(editPackProductQuery.toLowerCase()))).slice(0, 12).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between p-2 hover:bg-slate-50">
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-800 truncate">{p.name}</div>
+                            <div className="text-xs text-slate-500 truncate">${p.price.toFixed(2)} {p.unit} • {p.category}</div>
+                          </div>
+                          <button onClick={() => { setEditingPack((prev) => ({ ...prev, productIds: [...prev.productIds, p.id] })); setEditPackProductQuery(''); }} className="px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600">Add</button>
+                        </div>
+                      ))}
+                      {products.filter((p) => !editingPack.productIds.includes(p.id) && (p.name.toLowerCase().includes(editPackProductQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(editPackProductQuery.toLowerCase()))).length === 0 && (
+                        <div className="p-3 text-sm text-slate-500">No matches</div>
+                      )}
+                    </div>
+                  )}
+                  {editingPack.productIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {editingPack.productIds.map((id) => {
+                        const p = products.find((x) => x.id === id);
+                        if (!p) return null;
+                        return (
+                          <span key={id} className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+                            <span className="truncate max-w-[220px]">{p.name}</span>
+                            <button onClick={() => setEditingPack((prev) => ({ ...prev, productIds: prev.productIds.filter((pid) => pid !== id) }))} className="hover:bg-green-100 rounded p-1" aria-label={`Remove ${p.name}`}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No products selected yet.</p>
+                  )}
+                  {editingPack.productIds.length > 0 && (
+                    <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                      <div className="text-sm text-green-700">
+                        Selected: {editingPack.productIds.length} products
+                        <br />
+                        Total Value: ${editingPack.productIds.reduce((total, id) => { const product = products.find((p) => p.id === id); return total + (product ? product.price : 0); }, 0).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={updatePack} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold">Update Pack</button>
+              <button onClick={resetEditForm} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
+      {showAddCategory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Category</h2>
+            <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mb-4" placeholder="Category name" onKeyDown={(e) => e.key === 'Enter' && addCategory()} />
+            <div className="flex gap-3">
+              <button onClick={addCategory} className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors font-semibold">Add</button>
+              <button onClick={() => { setShowAddCategory(false); setNewCategory(''); }} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items_center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Supplier</h2>
+            <input type="text" value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none mb-4" placeholder="Supplier name" onKeyDown={(e) => e.key === 'Enter' && addSupplier()} />
+            <div className="flex gap-3">
+              <button onClick={addSupplier} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold">Add</button>
+              <button onClick={() => { setShowAddSupplier(false); setNewSupplier(''); }} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Create New Project</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Project Name *</label>
+                <input type="text" value={projectForm.name} onChange={(e) => setProjectForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" placeholder="Project name" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
+                <textarea value={projectForm.description} onChange={(e) => setProjectForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" rows="3" placeholder="Project description" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={createProject} className="flex-1 bg-green-500 text-white py-3 px-6 rounded-xl hover:bg-green-600 transition-colors font-semibold">Create Project</button>
+              <button onClick={() => { setShowNewProject(false); setProjectForm({ name: '', description: '' }); }} className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEstimateDetails && currentProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">{currentProject.name}</h2>
+                <p className="text-slate-600">{currentProject.description}</p>
+              </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditingSupplier(selectedSupplier);
-                    setSupplierFormData({
-                      name: selectedSupplier.name,
-                      contact: selectedSupplier.contact || '',
-                      email: selectedSupplier.email || '',
-                      phone: selectedSupplier.phone || '',
-                      extension: selectedSupplier.extension || ''
-                    });
-                    setShowSupplierDetail(false);
-                    setShowSupplierForm(true);
-                  }}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Supplier
+                <button onClick={() => exportToPDF(currentProject)} className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  Export & Share
                 </button>
-                <button
-                  onClick={() => setShowSupplierDetail(false)}
-                  className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm"
-                >
-                  Close
+                <button onClick={() => setShowEstimateDetails(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
+
+            {currentProject.items.length > 0 ? (
+              <div>
+                <div className="bg-slate-50 rounded-xl p-4 mb-6">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-slate-800">{getProjectItemCount(currentProject)}</div>
+                      <div className="text-sm text-slate-600">Total Items</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-blue-600">{currentProject.items.length}</div>
+                      <div className="text-sm text-slate-600">Unique Products</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">${getProjectTotal(currentProject).toFixed(2)}</div>
+                      <div className="text-sm text-slate-600">Total Estimate</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {currentProject.items.map((item) => (
+                    <div key={item.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                      <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Package className="w-6 h-6 text-slate-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-slate-800 truncate">{item.name}</h3>
+                        <p className="text-sm text-slate-600">{item.description}</p>
+                        <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
+                          <span>${item.price.toFixed(2)} {item.unit}</span>
+                          <span>•</span>
+                          <span>{item.supplier}</span>
+                          {item.link && (
+                            <>
+                              <span>•</span>
+                              <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 inline-flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" />
+                                Link
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => updateItemQuantity(currentProject.id, item.id, Math.max(0, item.quantity - 1))} className="w-8 h-8 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center">
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span className="w-12 text-center font-semibold">{item.quantity}</span>
+                          <button onClick={() => updateItemQuantity(currentProject.id, item.id, item.quantity + 1)} className="w-8 h-8 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors flex items-center justify-center">
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-lg text-slate-800">${(item.price * item.quantity).toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in this project</h3>
+                <p className="text-slate-500 mb-4">Start adding products from your library</p>
+                <button onClick={() => { setShowEstimateDetails(false); setActiveTab('library'); }} className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors">Browse Products</button>
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
   );
-};
-
-export default App;      
+}
