@@ -1749,23 +1749,28 @@ const renderPacksList = (filteredPacks) => {
                 <span className="text-sm text-slate-600 font-medium">Products:</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {pack.products.slice(0, 5).map((product, idx) => (
-                  <div
-                    key={idx}
-                    className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200"
-                    title={`${product.name} (x${product.quantity})`}
-                  >
-                    {product.image ? (
-                      <img 
-                        src={product.image} 
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Package className="w-6 h-6 text-slate-400" />
-                    )}
-                  </div>
-                ))}
+                {pack.products.slice(0, 5).map((packProduct, idx) => {
+                  // Buscar el producto completo desde la colección de productos
+                  const fullProduct = products.find(p => p.id === packProduct.id);
+
+                  return (
+                    <div
+                      key={idx}
+                      className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200"
+                      title={`${packProduct.name} (x${packProduct.quantity})`}
+                    >
+                      {fullProduct?.image ? (
+                        <img
+                          src={fullProduct.image}
+                          alt={packProduct.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Package className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                  );
+                })}
                 {pack.products.length > 5 && (
                   <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center text-xs font-medium text-slate-600">
                     +{pack.products.length - 5}
