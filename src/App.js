@@ -2936,147 +2936,146 @@ const renderProductSelector = () => (
 )}
 
       {/* Pack Detail Modal */}
-      {showPackDetail && selectedPack && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
-                  <p className="text-slate-600">{selectedPack.description}</p>
-                  {selectedPack.category && (
-                    <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-md text-sm font-medium mt-2">
-                      {selectedPack.category}
-                    </span>
-                  )}
-                </div>
-                <button 
-                  onClick={() => setShowPackDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
-              </div>
+{showPackDetail && selectedPack && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+      <div className="p-6 border-b border-slate-200">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{selectedPack.name}</h2>
+            <p className="text-slate-600">{selectedPack.description}</p>
+            {selectedPack.category && (
+              <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-md text-sm font-medium mt-2">
+                {selectedPack.category}
+              </span>
+            )}
+          </div>
+          <button 
+            onClick={() => setShowPackDetail(false)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
 
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {selectedPack.products?.length || 0}
-                  </div>
-                  <div className="text-sm text-slate-600">Products in Pack</div>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
-                    ${selectedPack.products?.reduce((sum, p) => sum + (p.price * p.quantity), 0).toFixed(2) || '0.00'}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Value</div>
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-4 text-center">
+          <div className="bg-green-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">
+              {selectedPack.products?.length || 0}
             </div>
-
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedPack.products && selectedPack.products.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
-                  {selectedPack.products.map((packProduct, index) => {
-                    // Buscar el producto completo desde la colección de productos
-                    const fullProduct = products.find(p => p.id === packProduct.id);
-
-                    return (
-                      <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                            {fullProduct?.image ? (
-                              <img
-                                src={fullProduct.image}
-                                alt={packProduct.name}
-                                className="w-full h-full object-cover rounded-lg"
-                              />
-                            ) : (
-                              <Package className="w-6 h-6 text-slate-400" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-slate-800">{packProduct.name}</h4>
-                            {packProduct.partNumber && (
-                              <p className="text-xs text-slate-500">Part: {packProduct.partNumber}</p>
-                            )}
-                            <p className="text-sm text-blue-600 font-semibold">${packProduct.price}</p>
-                          </div>
-                        </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updatePackProductQuantity(selectedPack, index, Math.max(1, product.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">{product.quantity}</span>
-                          <button
-                            onClick={() => updatePackProductQuantity(selectedPack, index, product.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeProductFromPack(selectedPack, index)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No products in pack</h3>
-                  <p className="text-slate-500">Edit this pack to add products</p>
-                </div>
-              )}
+            <div className="text-sm text-slate-600">Products in Pack</div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">
+              ${selectedPack.products?.reduce((sum, p) => sum + (p.price * p.quantity), 0).toFixed(2) || '0.00'}
             </div>
-
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Created: {new Date(selectedPack.createdAt).toLocaleDateString()}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => addPackToEstimate(selectedPack)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add to Estimate
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingPack(selectedPack);
-                      setPackFormData({
-                        name: selectedPack.name,
-                        description: selectedPack.description || '',
-                        category: selectedPack.category || '',
-                        products: selectedPack.products || [],
-                        image: selectedPack.image || null
-                      });
-                      setShowPackDetail(false);
-                      setShowPackForm(true);
-                    }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    Edit Pack
-                  </button>
-                </div>
-              </div>
-            </div>
+            <div className="text-sm text-slate-600">Total Value</div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="p-6 overflow-y-auto max-h-[60vh]">
+        {selectedPack.products && selectedPack.products.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
+            {selectedPack.products.map((packProduct, index) => {
+              const fullProduct = products.find(p => p.id === packProduct.id);
+              
+              return (
+                <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {fullProduct?.image ? (
+                        <img 
+                          src={fullProduct.image} 
+                          alt={packProduct.name}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      ) : (
+                        <Package className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-slate-800">{packProduct.name}</h4>
+                      {packProduct.partNumber && (
+                        <p className="text-xs text-slate-500">Part: {packProduct.partNumber}</p>
+                      )}
+                      <p className="text-sm text-blue-600 font-semibold">${packProduct.price}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => updatePackProductQuantity(selectedPack, index, Math.max(1, packProduct.quantity - 1))}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center font-medium">{packProduct.quantity}</span>
+                      <button
+                        onClick={() => updatePackProductQuantity(selectedPack, index, packProduct.quantity + 1)}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => removeProductFromPack(selectedPack, index)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">No products in pack</h3>
+            <p className="text-slate-500">Edit this pack to add products</p>
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 border-t border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-600">
+            Created: {new Date(selectedPack.createdAt).toLocaleDateString()}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => addPackToEstimate(selectedPack)}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add to Estimate
+            </button>
+            <button
+              onClick={() => {
+                setEditingPack(selectedPack);
+                setPackFormData({
+                  name: selectedPack.name,
+                  description: selectedPack.description || '',
+                  category: selectedPack.category || '',
+                  products: selectedPack.products || [],
+                  image: selectedPack.image || null
+                });
+                setShowPackDetail(false);
+                setShowPackForm(true);
+              }}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+            >
+              <Edit3 className="w-4 h-4" />
+              Edit Pack
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Product Detail Modal */}
       {showProductDetail && selectedProduct && (
