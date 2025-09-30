@@ -927,6 +927,43 @@ const App = () => {
     
     showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
   };
+  showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
+};
+
+// NUEVA FUNCIÓN: Export to TXT - AÑADIR AQUÍ (después de línea 929)
+const exportToTXT = (project) => {
+  if (!project.items || project.items.length === 0) {
+    showNotification('No items in this project to export', 'error');
+    return;
+  }
+
+  // Crear el contenido del archivo TXT
+  let txtContent = '';
+  
+  project.items.forEach((item, index) => {
+    const productName = item.name;
+    const productLink = item.link || 'No link available';
+    const quantity = item.quantity;
+    
+    txtContent += `${productName} --${productLink} Qty ${quantity}\n`;
+  });
+
+  // Crear blob y descargar
+  const blob = new Blob([txtContent], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_products.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  showNotification('Products list exported to TXT successfully!', 'success');
+};
+
+// Enhanced share estimate function
+const shareEstimate = (project, method) => {
 
   // Enhanced share estimate function
   const shareEstimate = (project, method) => {
@@ -1185,16 +1222,37 @@ const renderProjectsView = () => (
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      exportToPDF(project);
-                    }}
-                    className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                    title="Export to PDF"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
+                  <div className="relative group">
+  <button 
+    onClick={(e) => e.stopPropagation()}
+    className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+    title="Export options"
+  >
+    <Download className="w-4 h-4" />
+  </button>
+  <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 w-40">
+    <button 
+      onClick={(e) => {
+        e.stopPropagation();
+        exportToPDF(project);
+      }}
+      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+    >
+      <FileText className="w-4 h-4" />
+      Export PDF
+    </button>
+    <button 
+      onClick={(e) => {
+        e.stopPropagation();
+        exportToTXT(project);
+      }}
+      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+    >
+      <FileText className="w-4 h-4" />
+      Export TXT
+    </button>
+  </div>
+</div>
                   <div className="relative group">
                     <button 
                       onClick={(e) => e.stopPropagation()}
@@ -2841,19 +2899,30 @@ const renderProductSelector = () => (
             )}
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => exportToPDF(selectedProjectForDetail)}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export PDF
-            </button>
-            <button
-              onClick={() => setCurrentProject(selectedProjectForDetail)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              Set Active
-            </button>
+            <div className="relative group">
+  <button
+    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+  >
+    <Download className="w-4 h-4" />
+    Export
+  </button>
+  <div className="absolute right-0 bottom-full mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 w-40">
+    <button 
+      onClick={() => exportToPDF(selectedProjectForDetail)}
+      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+    >
+      <FileText className="w-4 h-4" />
+      Export PDF
+    </button>
+    <button 
+      onClick={() => exportToTXT(selectedProjectForDetail)}
+      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+    >
+      <FileText className="w-4 h-4" />
+      Export TXT
+    </button>
+  </div>
+</div>
           </div>
         </div>
       </div>
