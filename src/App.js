@@ -1216,16 +1216,37 @@ const renderProjectsView = () => (
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      exportToPDF(project);
-                    }}
-                    className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                    title="Export to PDF"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
+                  <div className="relative group">
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                      title="Export options"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 w-40">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportToPDF(project);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export PDF
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportToTXT(project);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export TXT
+                      </button>
+                    </div>
+                  </div>
                   <div className="relative group">
                     <button 
                       onClick={(e) => e.stopPropagation()}
