@@ -2893,13 +2893,30 @@ const renderProductSelector = () => (
             )}
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => exportToPDF(selectedProjectForDetail)}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export PDF
-            </button>
+                  <div className="relative group">
+                    <button
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
+                    <div className="absolute right-0 bottom-full mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 w-40">
+                      <button
+                        onClick={() => exportToPDF(selectedProjectForDetail)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export PDF
+                      </button>
+                      <button
+                        onClick={() => exportToTXT(selectedProjectForDetail)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export TXT
+                      </button>
+                    </div>
+                  </div>
             <button
               onClick={() => setCurrentProject(selectedProjectForDetail)}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
