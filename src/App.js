@@ -2678,136 +2678,157 @@ const renderProductSelector = () => (
       )}
 
       {/* Project Detail Modal */}
-      {showProjectDetail && selectedProjectForDetail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
-                  <p className="text-slate-600">{selectedProjectForDetail.description}</p>
-                  {selectedProjectForDetail.address && (
-                    <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
-                      <MapPin className="w-4 h-4" />
-                      {selectedProjectForDetail.address}
-                    </p>
-                  )}
-                </div>
-                <button 
-                  onClick={() => setShowProjectDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
-              </div>
+{showProjectDetail && selectedProjectForDetail && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+      <div className="p-6 border-b border-slate-200">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
+            <p className="text-slate-600">{selectedProjectForDetail.description}</p>
+            {selectedProjectForDetail.address && (
+              <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
+                <MapPin className="w-4 h-4" />
+                {selectedProjectForDetail.address}
+              </p>
+            )}
+          </div>
+          <button 
+            onClick={() => setShowProjectDetail(false)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
 
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {selectedProjectForDetail.items?.length || 0}
-                  </div>
-                  <div className="text-sm text-slate-600">Products</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {getProjectItemCount(selectedProjectForDetail)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Items</div>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
-                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Cost</div>
-                </div>
-              </div>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">
+              {selectedProjectForDetail.items?.length || 0}
             </div>
-
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
-                  {selectedProjectForDetail.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-slate-800">{item.name}</h4>
-                        <p className="text-sm text-slate-500">{item.description}</p>
-                        {item.partNumber && (
-                          <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
-                        )}
-                        {item.fromPack && (
-                          <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
-                          <div className="text-sm text-slate-500">x{item.quantity}</div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
-                  <p className="text-slate-500">Add products from the Product Library to get started</p>
-                </div>
-              )}
+            <div className="text-sm text-slate-600">Products</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">
+              {getProjectItemCount(selectedProjectForDetail)}
             </div>
-
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
-                  {selectedProjectForDetail.lastModified && (
-                    <span className="ml-4">
-                      Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => exportToPDF(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export PDF
-                  </button>
-                  <button
-                    onClick={() => setCurrentProject(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                  >
-                    Set Active
-                  </button>
-                </div>
-              </div>
+            <div className="text-sm text-slate-600">Total Items</div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-purple-600">
+              ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
             </div>
+            <div className="text-sm text-slate-600">Total Cost</div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="p-6 overflow-y-auto max-h-[60vh]">
+        {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
+            {selectedProjectForDetail.items.map((item) => {
+              // Buscar el producto para obtener su imagen
+              const product = products.find(p => p.id === item.productId);
+              
+              return (
+                <div key={item.id} className="flex items-center gap-4 bg-slate-50 p-4 rounded-lg">
+                  {/* Miniatura del producto */}
+                  <div className="w-16 h-16 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {product?.image ? (
+                      <img 
+                        src={product.image} 
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Package className="w-8 h-8 text-slate-400" />
+                    )}
+                  </div>
+
+                  {/* Información del producto */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-slate-800">{item.name}</h4>
+                    <p className="text-sm text-slate-500">{item.description}</p>
+                    {item.partNumber && (
+                      <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
+                    )}
+                    {item.fromPack && (
+                      <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
+                    )}
+                  </div>
+
+                  {/* Controles de cantidad y precio */}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
+                      <div className="text-sm text-slate-500">x{item.quantity}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center font-medium">{item.quantity}</span>
+                      <button
+                        onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
+            <p className="text-slate-500">Add products from the Product Library to get started</p>
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 border-t border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-600">
+            Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
+            {selectedProjectForDetail.lastModified && (
+              <span className="ml-4">
+                Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportToPDF(selectedProjectForDetail)}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export PDF
+            </button>
+            <button
+              onClick={() => setCurrentProject(selectedProjectForDetail)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+            >
+              Set Active
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Pack Detail Modal */}
       {showPackDetail && selectedPack && (
