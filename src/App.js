@@ -502,26 +502,26 @@ const App = () => {
     (product.partNumber && product.partNumber.toLowerCase().includes(productSelectorSearch.toLowerCase()))
   );
 
-  const addProductToPack = (product) => {
-    const isAlreadyAdded = packFormData.products.some(p => p.id === product.id);
-    if (isAlreadyAdded) {
-      showNotification('Product already added to pack', 'info');
-      return;
-    }
+const addProductToPack = (product) => {
+  const isAlreadyAdded = packFormData.products.some(p => p.id === product.id);
+  if (isAlreadyAdded) {
+    showNotification('Product already added to pack', 'info');
+    return;
+  }
 
-    setPackFormData({
-      ...packFormData,
-      products: [...packFormData.products, {
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        partNumber: product.partNumber || '',
-        quantity: 1,
-        image: product.image
-      }]
-    });
-    showNotification(`${product.name} added to pack`, 'success');
-  };
+  setPackFormData({
+    ...packFormData,
+    products: [...packFormData.products, {
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      partNumber: product.partNumber || '',
+      quantity: 1,
+      // ELIMINADO: image: product.image  <-- NO guardar la imagen aquí
+    }]
+  });
+  showNotification(`${product.name} added to pack`, 'success');
+};
 
   const removeProductFromFormPack = (productId) => {
     setPackFormData({
