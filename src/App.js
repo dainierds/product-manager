@@ -927,6 +927,37 @@ const App = () => {
     
     showNotification('Estimate exported successfully! Open the HTML file and print to PDF.', 'success');
   };
+  // NUEVA FUNCIÓN: Export to TXT
+const exportToTXT = (project) => {
+  if (!project.items || project.items.length === 0) {
+    showNotification('No items in this project to export', 'error');
+    return;
+  }
+
+  // Crear el contenido del archivo TXT
+  let txtContent = '';
+  
+  project.items.forEach((item) => {
+    const productName = item.name;
+    const productLink = item.link || 'No link available';
+    const quantity = item.quantity;
+    
+    txtContent += `${productName} --${productLink} Qty ${quantity}\n`;
+  });
+
+  // Crear blob y descargar
+  const blob = new Blob([txtContent], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_products.txt`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  showNotification('Products list exported to TXT successfully!', 'success');
+};
 
   // Enhanced share estimate function
   const shareEstimate = (project, method) => {
