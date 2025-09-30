@@ -3004,6 +3004,7 @@ const renderProductSelector = () => (
                             <p className="text-sm text-blue-600 font-semibold">${packProduct.price}</p>
                           </div>
                         </div>
+
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1">
                           <button
