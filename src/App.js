@@ -2116,8 +2116,8 @@ const renderProductSelector = () => (
         </div>
       )}
 
-      // Product Form Modal - SECCIÓN CORREGIDA
-{showProductForm && (
+// Product Form Modal - SECCIÓN CORREGIDA
+  {showProductForm && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
     <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h2 className="text-xl font-bold text-slate-800 mb-4">
@@ -2312,16 +2312,16 @@ const renderProductSelector = () => (
               setShowProductForm(false);
               setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
               setEditingProduct(null);
-            }}
-            className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
+             }}
+             className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+            >
+             Cancel
+           </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-)}
+  )}
 
       {/* Pack Form Modal */}
 {showPackForm && (
