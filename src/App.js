@@ -1597,118 +1597,150 @@ const renderProjectsView = () => (
     );
   };
 
-  // ENHANCED PACKS LIST with image support
-  const renderPacksList = (filteredPacks) => {
-    if (filteredPacks.length === 0) {
-      return (
-        <div className="text-center py-12">
-          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
-          <p className="text-slate-500 mb-4">Start by creating your first pack</p>
-          <button 
-            onClick={() => setShowPackForm(true)}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
-          >
-            Create Pack
-          </button>
-        </div>
-      );
-    }
-
+const renderPacksList = (filteredPacks) => {
+  if (filteredPacks.length === 0) {
     return (
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPacks.map((pack) => (
-          <div
-            key={pack.id}
-            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
-          >
-            <div className="flex gap-4">
-              {/* Icon Section with custom image support */}
-              <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                {pack.image ? (
-                  <img 
-                    src={pack.image} 
-                    alt={pack.name}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <Package className="w-8 h-8 text-green-600" />
+      <div className="text-center py-12">
+        <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-slate-600 mb-2">No packs found</h3>
+        <p className="text-slate-500 mb-4">Start by creating your first pack</p>
+        <button 
+          onClick={() => setShowPackForm(true)}
+          className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"
+        >
+          Create Pack
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {filteredPacks.map((pack) => (
+        <div
+          key={pack.id}
+          className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-100"
+        >
+          <div className="flex gap-4 mb-4">
+            {/* Icon Section con imagen personalizada */}
+            <div className="relative w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              {pack.image ? (
+                <img 
+                  src={pack.image} 
+                  alt={pack.name}
+                  className="w-full h-full object-cover rounded-xl"
+                />
+              ) : (
+                <Package className="w-8 h-8 text-green-600" />
+              )}
+            </div>
+
+            {/* Content Section */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-2 mb-1">
+                <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
+                  {pack.name}
+                </h3>
+                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
+              </div>
+              <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
+              <div className="flex items-center gap-4 text-sm flex-wrap">
+                <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
+                  {pack.products?.length || 0} products
+                </span>
+                {pack.category && (
+                  <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
                 )}
-              </div>
-
-              {/* Content Section */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-2 mb-1">
-                  <h3 className="font-bold text-slate-800 text-lg truncate flex-1">
-                    {pack.name}
-                  </h3>
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Pack</span>
-                </div>
-                <p className="text-slate-600 text-sm mb-2 line-clamp-2">{pack.description}</p>
-                <div className="flex items-center gap-4 text-sm flex-wrap">
-                  <span className="bg-green-50 text-green-700 px-3 py-1 rounded-lg font-semibold">
-                    {pack.products?.length || 0} products
-                  </span>
-                  {pack.category && (
-                    <span className="bg-slate-50 text-slate-600 px-2 py-1 rounded text-xs">{pack.category}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Vertical Buttons Section - Right Side */}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => addPackToEstimate(pack)}
-                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
-                  title="Add pack to estimate"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingPack(pack);
-                    setPackFormData({
-                      name: pack.name,
-                      description: pack.description || '',
-                      category: pack.category || '',
-                      products: pack.products || [],
-                      image: pack.image || null
-                    });
-                    setShowPackForm(true);
-                  }}
-                  className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Edit pack"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleDeletePack(pack.id)}
-                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                  title="Delete pack"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
-            {/* Bottom Section - View Items Button */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            {/* Vertical Buttons Section - Right Side */}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => addPackToEstimate(pack)}
+                className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                title="Add pack to estimate"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => {
-                  setSelectedPack(pack);
-                  setShowPackDetail(true);
+                  setEditingPack(pack);
+                  setPackFormData({
+                    name: pack.name,
+                    description: pack.description || '',
+                    category: pack.category || '',
+                    products: pack.products || [],
+                    image: pack.image || null
+                  });
+                  setShowPackForm(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
+                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                title="Edit pack"
               >
-                <Eye className="w-4 h-4" />
-                View Items
+                <Edit3 className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => handleDeletePack(pack.id)}
+                className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                title="Delete pack"
+              >
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
-        ))}
-      </div>
-    );
-  };
+
+          {/* NUEVO: Mostrar miniaturas de productos del pack */}
+          {pack.products && pack.products.length > 0 && (
+            <div className="mb-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm text-slate-600 font-medium">Products:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {pack.products.slice(0, 5).map((product, idx) => (
+                  <div
+                    key={idx}
+                    className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200"
+                    title={`${product.name} (x${product.quantity})`}
+                  >
+                    {product.image ? (
+                      <img 
+                        src={product.image} 
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Package className="w-6 h-6 text-slate-400" />
+                    )}
+                  </div>
+                ))}
+                {pack.products.length > 5 && (
+                  <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center text-xs font-medium text-slate-600">
+                    +{pack.products.length - 5}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Section - View Items Button */}
+          <div className="pt-4 border-t border-slate-100">
+            <button
+              onClick={() => {
+                setSelectedPack(pack);
+                setShowPackDetail(true);
+              }}
+              className="w-full flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 py-2 rounded-lg transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+              View Items
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
   // ENHANCED Settings View with Supplier Contact Features
   const renderSettingsView = () => (
@@ -2116,8 +2148,7 @@ const renderProductSelector = () => (
         </div>
       )}
 
-      // Product Form Modal - SECCIÓN CORREGIDA
-{showProductForm && (
+  {showProductForm && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
     <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h2 className="text-xl font-bold text-slate-800 mb-4">
@@ -2312,16 +2343,16 @@ const renderProductSelector = () => (
               setShowProductForm(false);
               setProductFormData({ name: '', price: '', description: '', category: '', supplier: '', link: '', unit: 'each', partNumber: '', isAutoExtracted: false, image: null });
               setEditingProduct(null);
-            }}
-            className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
+             }}
+             className="flex-1 bg-slate-100 text-slate-700 py-3 px-6 rounded-xl hover:bg-slate-200 transition-colors font-semibold"
+            >
+             Cancel
+           </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-)}
+  )}
 
       {/* Pack Form Modal */}
 {showPackForm && (
@@ -2678,136 +2709,157 @@ const renderProductSelector = () => (
       )}
 
       {/* Project Detail Modal */}
-      {showProjectDetail && selectedProjectForDetail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
-                  <p className="text-slate-600">{selectedProjectForDetail.description}</p>
-                  {selectedProjectForDetail.address && (
-                    <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
-                      <MapPin className="w-4 h-4" />
-                      {selectedProjectForDetail.address}
-                    </p>
-                  )}
-                </div>
-                <button 
-                  onClick={() => setShowProjectDetail(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
-              </div>
+{showProjectDetail && selectedProjectForDetail && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+      <div className="p-6 border-b border-slate-200">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{selectedProjectForDetail.name}</h2>
+            <p className="text-slate-600">{selectedProjectForDetail.description}</p>
+            {selectedProjectForDetail.address && (
+              <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
+                <MapPin className="w-4 h-4" />
+                {selectedProjectForDetail.address}
+              </p>
+            )}
+          </div>
+          <button 
+            onClick={() => setShowProjectDetail(false)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
 
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {selectedProjectForDetail.items?.length || 0}
-                  </div>
-                  <div className="text-sm text-slate-600">Products</div>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {getProjectItemCount(selectedProjectForDetail)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Items</div>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
-                    ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
-                  </div>
-                  <div className="text-sm text-slate-600">Total Cost</div>
-                </div>
-              </div>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">
+              {selectedProjectForDetail.items?.length || 0}
             </div>
-
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
-                  {selectedProjectForDetail.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-slate-800">{item.name}</h4>
-                        <p className="text-sm text-slate-500">{item.description}</p>
-                        {item.partNumber && (
-                          <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
-                        )}
-                        {item.fromPack && (
-                          <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
-                          <div className="text-sm text-slate-500">x{item.quantity}</div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
-                            className="p-1 text-slate-600 hover:bg-slate-200 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
-                  <p className="text-slate-500">Add products from the Product Library to get started</p>
-                </div>
-              )}
+            <div className="text-sm text-slate-600">Products</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">
+              {getProjectItemCount(selectedProjectForDetail)}
             </div>
-
-            <div className="p-6 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
-                  {selectedProjectForDetail.lastModified && (
-                    <span className="ml-4">
-                      Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => exportToPDF(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export PDF
-                  </button>
-                  <button
-                    onClick={() => setCurrentProject(selectedProjectForDetail)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-                  >
-                    Set Active
-                  </button>
-                </div>
-              </div>
+            <div className="text-sm text-slate-600">Total Items</div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-purple-600">
+              ${getProjectTotal(selectedProjectForDetail).toFixed(2)}
             </div>
+            <div className="text-sm text-slate-600">Total Cost</div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="p-6 overflow-y-auto max-h-[60vh]">
+        {selectedProjectForDetail.items && selectedProjectForDetail.items.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-slate-800 mb-4">Project Items</h3>
+            {selectedProjectForDetail.items.map((item) => {
+              // Buscar el producto para obtener su imagen
+              const product = products.find(p => p.id === item.productId);
+              
+              return (
+                <div key={item.id} className="flex items-center gap-4 bg-slate-50 p-4 rounded-lg">
+                  {/* Miniatura del producto */}
+                  <div className="w-16 h-16 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {product?.image ? (
+                      <img 
+                        src={product.image} 
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Package className="w-8 h-8 text-slate-400" />
+                    )}
+                  </div>
+
+                  {/* Información del producto */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-slate-800">{item.name}</h4>
+                    <p className="text-sm text-slate-500">{item.description}</p>
+                    {item.partNumber && (
+                      <p className="text-xs text-slate-400">Part: {item.partNumber}</p>
+                    )}
+                    {item.fromPack && (
+                      <p className="text-xs text-green-600">From pack: {item.fromPack}</p>
+                    )}
+                  </div>
+
+                  {/* Controles de cantidad y precio */}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-semibold text-slate-800">${item.price.toFixed(2)}</div>
+                      <div className="text-sm text-slate-500">x{item.quantity}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, Math.max(1, item.quantity - 1))}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center font-medium">{item.quantity}</span>
+                      <button
+                        onClick={() => updateProductQuantity(selectedProjectForDetail, item.id, item.quantity + 1)}
+                        className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => removeProductFromProject(selectedProjectForDetail, item.id)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+            <h3 className="text-lg font-semibold text-slate-600 mb-2">No items in project</h3>
+            <p className="text-slate-500">Add products from the Product Library to get started</p>
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 border-t border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-600">
+            Created: {new Date(selectedProjectForDetail.createdAt).toLocaleDateString()}
+            {selectedProjectForDetail.lastModified && (
+              <span className="ml-4">
+                Modified: {new Date(selectedProjectForDetail.lastModified).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportToPDF(selectedProjectForDetail)}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export PDF
+            </button>
+            <button
+              onClick={() => setCurrentProject(selectedProjectForDetail)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+            >
+              Set Active
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Pack Detail Modal */}
       {showPackDetail && selectedPack && (
