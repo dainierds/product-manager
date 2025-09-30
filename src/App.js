@@ -2978,28 +2978,32 @@ const renderProductSelector = () => (
               {selectedPack.products && selectedPack.products.length > 0 ? (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-slate-800 mb-4">Pack Contents</h3>
-                  {selectedPack.products.map((product, index) => (
-                    <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                          {product.image ? (
-                            <img 
-                              src={product.image} 
-                              alt={product.name}
-                              className="w-full h-full object-cover rounded-lg"
-                            />
-                          ) : (
-                            <Package className="w-6 h-6 text-slate-400" />
-                          )}
+                  {selectedPack.products.map((packProduct, index) => {
+                    // Buscar el producto completo desde la colección de productos
+                    const fullProduct = products.find(p => p.id === packProduct.id);
+
+                    return (
+                      <div key={index} className="flex items-center justify-between bg-slate-50 p-4 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                            {fullProduct?.image ? (
+                              <img
+                                src={fullProduct.image}
+                                alt={packProduct.name}
+                                className="w-full h-full object-cover rounded-lg"
+                              />
+                            ) : (
+                              <Package className="w-6 h-6 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-slate-800">{packProduct.name}</h4>
+                            {packProduct.partNumber && (
+                              <p className="text-xs text-slate-500">Part: {packProduct.partNumber}</p>
+                            )}
+                            <p className="text-sm text-blue-600 font-semibold">${packProduct.price}</p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-slate-800">{product.name}</h4>
-                          {product.partNumber && (
-                            <p className="text-xs text-slate-500">Part: {product.partNumber}</p>
-                          )}
-                          <p className="text-sm text-blue-600 font-semibold">${product.price}</p>
-                        </div>
-                      </div>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1">
                           <button
